@@ -51,29 +51,30 @@ of Recurring Event Arrivals with Classical and Neural\\ Temporal Point Processes
 \vspace{-1.2em}
 \begin{abstract}
 \noindent
-Data platforms depend on files that are \emph{supposed} to arrive on a schedule: daily vendor
-extracts, hourly logs, month-end reports. Alerting on late files with a fixed deadline is either
+Data platforms depend on files that are \emph{supposed} to arrive on a schedule, such as daily
+vendor extracts, hourly logs and month-end reports. Fixed-deadline alerting on such feeds is either
 noisy or blind, because real schedules drift, skip weekends and holidays, burst at quarter end and
-occasionally go silent. We frame the question ``when will the next file arrive?'' as probabilistic
-forecasting of the next inter-arrival gap. We compare four temporal point-process models under one
-leakage-safe protocol: a homogeneous Poisson process, an exponential-kernel Hawkes process, a
-continuous-time-LSTM Neural Hawkes process (\NHP) and an intensity-free GRU with a log-normal-mixture
-decoder (\LNM). The protocol uses chronological per-source splits with explicit right-censoring,
-replays the recurrent state through all earlier events before scoring, and scores every model with
-the same predictive CDF interface. Hyper-parameters are selected on validation likelihood
-on 26 synthetic sources covering regular, calendar-driven, low-frequency, perturbed, bursty and
-heavy-tailed schedules. The frozen configuration is then evaluated once on a held-out real data set
-of Delta JFK$\to$LAX flight numbers (BTS On-Time Performance, 2023--2024). \LNM{} has
-the lowest test NLL on \SynLogNormMixBestNLL{}/\SynNValid{} synthetic sources and
-\BtsLogNormMixBestNLL{}/\BtsNValid{} flights. Its median gain over Poisson is \SynLogNormMixGain{} and
-\BtsLogNormMixGain{} nats/event, and it is the only model with close to nominal interval coverage
-(\SynLogNormMixCovEighty{} observed at the 80\% level on synthetic data). \NHP{} matches \LNM{} on
-CRPS for synthetic data (CRPS skill \SynNHPSkill{} vs.\ \SynLogNormMixSkill{}). On flights, however,
-it fails on unusually long gaps and its NLL advantage over Poisson is not significant. Each of its
-training runs also takes about nine times longer on the synthetic data. The classical Hawkes process collapses to Poisson on almost every
-source. Simulation and profile-likelihood checks trace this to its constant background, which cannot
-represent a periodic schedule. We release the system as a tested, installable package with an inference API that
-reports the probability that an overdue file still arrives before its deadline.
+occasionally go silent. We therefore frame the question ``when will the next file arrive?'' as
+probabilistic forecasting of the next inter-arrival gap, and we compare four temporal point-process
+models under a single leakage-safe protocol: a homogeneous Poisson process, an exponential-kernel
+Hawkes process, a continuous-time-LSTM Neural Hawkes process (\NHP) and an intensity-free GRU with a
+log-normal-mixture decoder (\LNM). The protocol uses chronological per-source splits with explicit
+right-censoring, replays each model's state through all earlier events before scoring, and evaluates
+every model through the same predictive-CDF interface. Hyper-parameters are selected on validation
+likelihood over 26 synthetic sources spanning regular, calendar-driven, low-frequency, perturbed,
+bursty and heavy-tailed schedules, and the frozen configuration is then evaluated once on a held-out
+real data set of Delta JFK$\to$LAX flight numbers (BTS On-Time Performance, 2023--2024). \LNM{}
+attains the lowest test NLL on \SynLogNormMixBestNLL{}/\SynNValid{} synthetic sources and
+\BtsLogNormMixBestNLL{}/\BtsNValid{} flights, with median gains over Poisson of \SynLogNormMixGain{}
+and \BtsLogNormMixGain{} nats/event. It is also the only model whose intervals come close to nominal
+coverage (\SynLogNormMixCovEighty{} observed at the 80\% level on synthetic data). \NHP{} matches
+\LNM{} on CRPS for synthetic data (skill \SynNHPSkill{} vs.\ \SynLogNormMixSkill{}), but on flights
+it fails on unusually long gaps, its NLL advantage over Poisson is not significant, and each of its
+training runs costs about nine times as much. The classical Hawkes process collapses to Poisson on
+almost every source; simulation and profile-likelihood checks trace this collapse to its constant
+background, which cannot represent a periodic schedule. The system is released as a tested,
+installable package whose inference API reports the probability that an overdue file will still
+arrive before its deadline.
 \end{abstract}
 \noindent\textbf{Keywords:} temporal point processes, Hawkes process, neural Hawkes, intensity-free
 models, probabilistic forecasting, proper scoring rules, data-pipeline monitoring
@@ -84,29 +85,31 @@ models, probabilistic forecasting, proper scoring rules, data-pipeline monitorin
 % =====================================================================
 \section{Introduction}
 % =====================================================================
-Modern analytics and machine-learning systems ingest data from dozens of upstream feeds. A missing
-or late file silently corrupts downstream tables, features and models, and it is one of the most
-common sources of ``hidden technical debt'' in production ML~\citep{sculley2015hidden,schelter2018automating}.
-On-call teams usually guard feeds with hand-set rules such as ``alert if the 09:00 file has not
-arrived by 11:00''. Such rules are brittle. Feeds skip weekends and holidays, arrive late on certain
-weekdays, burst at month or quarter end, emit correction files, and occasionally go silent for days.
-A rule tight enough to catch real incidents fires constantly on harmless jitter, and a rule loose
-enough to be quiet misses incidents.
+Modern analytics and machine-learning systems ingest data from dozens of upstream feeds, and a
+missing or late file silently corrupts the downstream tables, features and models that depend on it.
+Data issues of this kind are among the most common sources of ``hidden technical debt'' in
+production ML~\citep{sculley2015hidden,schelter2018automating}. On-call teams usually guard feeds
+with hand-set rules such as ``alert if the 09:00 file has not arrived by 11:00'', but such rules are
+brittle: feeds skip weekends and holidays, arrive late on particular weekdays, burst at month or
+quarter end, emit correction files and occasionally go silent for days. A rule tight enough to catch
+real incidents therefore fires constantly on harmless jitter, while one loose enough to stay quiet
+misses the incidents it was meant to catch.
 
 This project replaces fixed rules with a \emph{probabilistic forecast} of the next arrival. Given a
-feed's arrival history, the model returns a predictive distribution for the next inter-arrival gap.
-From it an alerting system can read quantiles (``90\% of the time the file lands before 09:47''),
-the probability of meeting a service-level agreement (SLA), and, crucially, the probability that a
+feed's arrival history, the model returns a predictive distribution for the next inter-arrival gap,
+from which an alerting system can read quantiles (``90\% of the time the file lands before 09:47''),
+the probability of meeting a service-level agreement (SLA) and, crucially, the probability that a
 file which is \emph{already} late will still arrive before the deadline.
 
-The problem is harder than ordinary time-series regression for four reasons. (i) The quantity of
-interest is the \emph{time until} an event, a positive and often multi-modal random variable. A
-weekday feed has gaps of about 24\,h and about 72\,h, so a point forecast is a poor summary.
-(ii) Observation is censored. After the last arrival in a window we only know that the next gap is
-\emph{longer} than the elapsed time. (iii) Sources differ by four orders of magnitude in cadence
-(hourly to annual) and in the mechanism behind their regularity (clock, calendar, self-excitation,
-heavy tails). (iv) Evaluation must avoid look-ahead. Each forecast may only condition on events
-before it, and model choices must not be tuned on the data used to report results.
+The problem is harder than ordinary time-series regression for four reasons. First, the quantity of
+interest is the \emph{time until} an event, a positive and often multi-modal random variable; a
+weekday feed has gaps of roughly 24\,h and 72\,h, so any single point forecast summarises it poorly.
+Second, observation is censored: after the last arrival in a window we know only that the next gap
+is \emph{longer} than the elapsed time. Third, sources differ by four orders of magnitude in cadence
+(hourly to annual) and in the mechanism behind their regularity, whether clock, calendar,
+self-excitation or heavy tails. Fourth, evaluation must avoid look-ahead, so each forecast may
+condition only on earlier events and no modelling choice may be tuned on the data used to report
+results.
 
 \paragraph{Contributions.} We (1) formulate next-arrival forecasting as per-source temporal
 point-process modelling with explicit right-censoring, and define an evaluation protocol in which
@@ -117,9 +120,8 @@ intensity-free log-normal-mixture model~\citep{shchur2020intensity} on 26 design
 schedules; (3) evaluate the configuration chosen on synthetic data \emph{once} on real flight
 arrivals, as a held-out check that the conclusions transfer; (4) diagnose, with simulation and profile likelihood, why the classical
 Hawkes process detects no self-excitation even on a source built to have it; and (5) package the
-work as a tested, reproducible system. The package includes software guards against tuning on the test set and a
-forecasting API for overdue-file probabilities. Every number in this report is generated from the
-result files by a single command.
+work as a tested, reproducible system that includes software guards against tuning on the test set
+and a forecasting API for overdue-file probabilities.
 
 Section~\ref{sec:related} reviews related work, Section~\ref{sec:data} describes the data,
 Section~\ref{sec:formulation} formalises the task, Section~\ref{sec:methods} presents the models,
@@ -131,33 +133,36 @@ Sections~\ref{sec:discussion}--\ref{sec:conclusion} discuss limitations and conc
 % =====================================================================
 \paragraph{Temporal point processes.} A temporal point process (TPP) is specified by its conditional
 intensity $\lambda^*(t)$, the instantaneous event rate given the history~\citep{daley2003introduction}.
-The homogeneous Poisson process has a constant intensity and memoryless exponential gaps. The Hawkes
-process~\citep{hawkes1971spectra} adds self-excitation: every event temporarily raises the intensity.
-For an exponential kernel the likelihood can be evaluated in linear time~\citep{ozaki1979maximum}, and
-the model has been widely used for clustered events such as trades and earthquakes~\citep{bacry2015hawkes,laub2015hawkes}.
+The homogeneous Poisson process has a constant intensity and therefore memoryless, exponentially
+distributed gaps. The Hawkes process~\citep{hawkes1971spectra} adds self-excitation, in which every
+event temporarily raises the intensity; with an exponential kernel its likelihood can be evaluated in
+linear time~\citep{ozaki1979maximum}, and the model has been widely applied to clustered events such
+as trades and earthquakes~\citep{bacry2015hawkes,laub2015hawkes}.
 
 \paragraph{Neural TPPs.} Recurrent marked TPPs~\citep{du2016recurrent} embed the event history with an
-RNN and output a parametric intensity. The Neural Hawkes process~\citep{mei2017neural} instead uses a
-continuous-time LSTM whose cell state decays between events, so the intensity is defined at every
-real time and can take non-monotone shapes. Attention-based variants followed~\citep{zuo2020transformer,zhang2020self};
-see~\citep{shchur2021neural} for a review. Intensity-based models need the compensator
-$\int\lambda^*$, which for neural intensities requires Monte Carlo or numerical integration.
-\citet{omi2019fully} model the cumulative intensity directly. \citet{shchur2020intensity} skip the
-intensity altogether and parameterise the conditional density of the next gap as a mixture of
-log-normals. This gives closed-form likelihood, CDF and sampling, and it matches or beats
-intensity-based models on standard benchmarks.
+RNN and output a parametric intensity, whereas the Neural Hawkes process~\citep{mei2017neural} uses a
+continuous-time LSTM whose cell state decays between events, so that the intensity is defined at
+every real time and can take non-monotone shapes. Attention-based variants
+followed~\citep{zuo2020transformer,zhang2020self}, and Shchur et al.~\citep{shchur2021neural} review the area.
+Intensity-based models require the compensator $\int\lambda^*$, which for neural intensities must be
+approximated by Monte Carlo or numerical integration. Omi et al.~\citep{omi2019fully} avoid this by modelling
+the cumulative intensity directly, and Shchur et al.~\citep{shchur2020intensity} bypass the intensity altogether by
+parameterising the conditional density of the next gap as a mixture of log-normals; the resulting
+model has closed-form likelihood, CDF and sampling, and it matches or outperforms intensity-based
+models on standard benchmarks.
 
 \paragraph{Time encodings and covariates.} Learned periodic encodings such as Time2Vec~\citep{kazemi2019time2vec}
 let a network discover cycles in elapsed time. Fixed cyclical calendar features (sine/cosine of hour,
 day and month) are the standard way to inject known seasonality into neural
 forecasters~\citep{salinas2020deepar}.
 
-\paragraph{Evaluating probabilistic forecasts.} Forecasts should be judged with \emph{proper} scoring
-rules~\citep{gneiting2007strictly}. Two standard choices are the logarithmic score (negative
-log-likelihood) and the continuous ranked probability score~\citep{matheson1976scoring}. The goal is
-to maximise sharpness subject to calibration~\citep{gneiting2007probabilistic}, which can be checked
-with the probability integral transform (PIT)~\citep{dawid1984present}. When data are ordered in time,
-validation must respect that order~\citep{tashman2000out,bergmeir2012use}.
+\paragraph{Evaluating probabilistic forecasts.} Probabilistic forecasts should be judged with
+\emph{proper} scoring rules~\citep{gneiting2007strictly}, of which the logarithmic score (negative
+log-likelihood) and the continuous ranked probability score~\citep{matheson1976scoring} are the
+standard choices. The aim is to maximise sharpness subject to
+calibration~\citep{gneiting2007probabilistic}, and calibration can be checked with the probability
+integral transform (PIT)~\citep{dawid1984present}. When data are ordered in time, validation must
+also respect that order~\citep{tashman2000out,bergmeir2012use}.
 
 \paragraph{Gap addressed.} Neural TPPs are usually benchmarked on pooled event logs with
 marks~\citep{shchur2021neural}. We study a narrower, operationally important setting: many
@@ -169,10 +174,10 @@ average log-likelihood.
 \section{Data}\label{sec:data}
 % =====================================================================
 \subsection{Synthetic ingestion sources}
-Real file-arrival logs are proprietary, so we generated 26 synthetic sources (34,389 arrivals,
-1 January 2023 to 31 December 2024) with a deterministic generator. Each source is seeded from its
-own identifier, so a single source can be regenerated in isolation. The sources were designed to span
-the behaviours observed in production ingestion (Table~\ref{tab:sources}). We group them into six
+Because real file-arrival logs are proprietary, we generated 26 synthetic sources (34,389 arrivals,
+1 January 2023 to 31 December 2024) with a deterministic generator that seeds each source from its
+own identifier, so that any single source can be regenerated in isolation. The sources were designed
+to span the behaviours observed in production ingestion (Table~\ref{tab:sources}) and fall into six
 schedule types:
 \begin{itemize}
 \item \emph{regular cadence}: daily, 6-hourly, hourly;
@@ -184,62 +189,57 @@ schedule types:
 \item \emph{bursty}: quarter-end bursts, correction files, a Hawkes-like self-exciting source;
 \item \emph{heavy-tailed}: Pareto gaps with shape 1.5.
 \end{itemize}
-Each source is a single sequence of timestamps. The models see only the timestamps, never the
-generating rule. The generator also records ground-truth labels, such as whether a file is a
-\emph{main} or a \emph{follow-up} delivery and whether it falls in a quarter-end burst. These labels
+Each source is a single sequence of timestamps, and the models see only those timestamps, never the
+generating rule. The generator also records ground-truth labels, for example whether a file is a
+\emph{main} or a \emph{follow-up} delivery and whether it falls in a quarter-end burst; these labels
 are withheld from every model and used only for diagnosis (Section~\ref{sec:hawkes}).
 
 \subsection{Real flight arrivals (held-out check)}
-To test whether the conclusions transfer, we use the U.S.\ Bureau of Transportation Statistics
-\emph{Airline On-Time Performance} data~\citep{bts2024ontime}. We extract every Delta Air Lines
-flight from JFK to LAX in 2023--2024 and treat each flight number as one source whose events are the
-\emph{actual} arrival times (\BtsNSources{} evaluated flight numbers out of 56; 6,527 arrivals).
-Cancelled and diverted flights are removed, so they appear as longer gaps. Flight numbers are
-also seasonally added and withdrawn, which produces gaps of weeks or months. These data are a
-realistic stand-in for a scheduled feed: strongly daily, with operational delay noise and
+To test whether the conclusions transfer to real data, we use the U.S.\ Bureau of Transportation
+Statistics \emph{Airline On-Time Performance} data~\citep{bts2024ontime}. We extract every Delta Air
+Lines flight from JFK to LAX in 2023--2024 and treat each flight number as a source whose events are
+its \emph{actual} arrival times (\BtsNSources{} evaluated flight numbers out of 56; 6,527 arrivals).
+Cancelled and diverted flights are removed and therefore appear as longer gaps, and flight numbers
+are seasonally added and withdrawn, which produces gaps of weeks or months. The resulting series are
+a realistic stand-in for a scheduled feed: strongly daily, with operational delay noise and
 occasional long service gaps.
 
-\paragraph{Provenance.} The project began as a data practicum whose working data set covered five BTS
-routes (Delta JFK$\to$LAX, American ORD$\to$ATL and MIA$\to$JFK, JetBlue BOS$\to$DCA, Alaska
-SEA$\to$SFO). It also included engineered lag and rolling-mean features of the gaps. For the capstone
-we kept the route with the most flight numbers, and we restricted model inputs to the raw timestamps
-and calendar features derived from them. A deployed monitor sees only arrival times, and
-lag features would duplicate what the recurrent models already learn from the gap sequence.
-
 \subsection{Exploratory findings}
-Figure~\ref{fig:data} shows gap distributions on a log scale. Most synthetic sources are sharply
-peaked at their nominal cadence. Calendar-driven sources are multi-modal: SRC\_03 has peaks at 24\,h
-and 72\,h (Friday$\to$Monday), and SRC\_11 has 2\,h gaps within the business day plus overnight and
-weekend gaps. Bursty and heavy-tailed sources spread over two to three decades. BTS flights
-concentrate tightly at 24\,h (median gap 24.0\,h for most flight numbers) but have a long right tail
-from cancellations and seasonal suspensions (maximum gap $>$ 6,000\,h). Sequence lengths range from
-2 (SRC\_23, annual) to 17,544 (SRC\_08, hourly) events. Sources this small or this large demand
-different handling in training (Section~\ref{sec:training}).
+Figure~\ref{fig:data} shows the gap distributions on a log scale. Most synthetic sources are sharply
+peaked at their nominal cadence, whereas calendar-driven sources are multi-modal: SRC\_03 has peaks
+at 24\,h and 72\,h (Friday$\to$Monday), and SRC\_11 combines 2\,h gaps within the business day with
+overnight and weekend gaps. Bursty and heavy-tailed sources spread over two to three decades. BTS
+flights concentrate tightly at 24\,h (the median gap is 24.0\,h for most flight numbers) but have a
+long right tail from cancellations and seasonal suspensions, with a maximum gap above 6,000\,h.
+Sequence lengths range from 2 events (SRC\_23, annual) to 17,544 (SRC\_08, hourly), and sources at
+the two extremes require different handling in training (Section~\ref{sec:training}).
 
 \paragraph{Calendar structure makes gaps non-exponential.} Sources restricted to weekdays or
 selected days (SRC\_03, 06, 07, 26) have median gaps near 24\,h but much larger means, because
-weekends and holidays insert 48--120\,h gaps. Their Pearson skewness $3(\bar x-\tilde x)/s$ is
-strongly positive (2.10 for SRC\_06, 1.54 for SRC\_07, 1.48 for SRC\_26; 2.13 for the monthly
-SRC\_18). The self-exciting SRC\_24 is the opposite case. 27\% of its gaps are bursts (much shorter than
-its typical gap) and its skewness is negative ($-0.82$), because follow-up files cut the daily gap in
-two. The Pareto source SRC\_25 has a median gap of only 4.7\,h but a standard deviation of 35.7\,h and
-a maximum of 1,486\,h. Autocorrelation of the gap sequence is also source-dependent. SRC\_02 shows
-repeated spikes that follow its weekly late-Wednesday rule, whereas the hourly SRC\_08 is
-close to uncorrelated. No single gap distribution, and no memoryless model, fits this population.
+weekends and holidays insert gaps of 48--120\,h; their Pearson skewness $3(\bar x-\tilde x)/s$ is
+accordingly strongly positive (2.10 for SRC\_06, 1.54 for SRC\_07 and 1.48 for SRC\_26, against 2.13
+for the monthly SRC\_18). The self-exciting SRC\_24 is the opposite case: 27\% of its gaps are bursts
+much shorter than its typical gap, and its skewness is negative ($-0.82$) because follow-up files
+split the daily gap in two. The Pareto source SRC\_25 has a median gap of only 4.7\,h but a standard
+deviation of 35.7\,h and a maximum of 1,486\,h. Serial dependence also varies by source: the gap
+autocorrelation of SRC\_02 shows repeated spikes that follow its weekly late-Wednesday rule, whereas
+the hourly SRC\_08 is close to uncorrelated. No single gap distribution, and no memoryless model, can
+fit this population.
 
 \paragraph{Long gaps and missing days.} We flag a gap as \emph{long} if it exceeds three times the
-source's own median. This is a simple proxy for a missed or late delivery. The highest rates are on the
-Tue--Thu source SRC\_06 (104 of 312 gaps, 33.3\%), on the intraday sources SRC\_11 (20.0\%) and SRC\_10
-(10.0\%), where every overnight or weekend pause counts, and on the heavy-tailed SRC\_25 (9.3\%). On
-SRC\_25 each flagged gap is also far longer in absolute terms. The near-deterministic daily sources
-SRC\_01 and SRC\_02 have none. For flights, where cancellations are already removed, the relevant
-question is how many scheduled days are missing. Calendar completeness (observed days over days
-between a flight number's first and last arrival) has a mean of 73.5\% and a median of 79.9\% across
-the 56 flight numbers. Eleven flight numbers are missing more than half of their days, and seventeen
-are missing none; weighted by days, service is observed on 61\% of expected days. These findings shaped
-the design. Each source is modelled separately, results are broken down by schedule type, and long
-gaps are evaluated separately (Section~\ref{sec:long-gaps}), so that aggregate scores cannot hide
-failures on the operationally important rare events.
+source's own median, a simple proxy for a missed or late delivery. The highest rates occur on the
+Tue--Thu source SRC\_06 (104 of 312 gaps, 33.3\%), on the intraday sources SRC\_11 (20.0\%) and
+SRC\_10 (10.0\%), where every overnight or weekend pause counts, and on the heavy-tailed SRC\_25
+(9.3\%), whose flagged gaps are also far longer in absolute terms; the near-deterministic daily
+sources SRC\_01 and SRC\_02 have none. For flights, where cancellations are already removed, the
+relevant question is instead how many scheduled days are missing. Calendar completeness, defined as
+observed days over the days between a flight number's first and last arrival, has a mean of 73.5\%
+and a median of 79.9\% across the 56 flight numbers. Eleven flight numbers are missing more than half
+of their days and seventeen are missing none, and weighted by days, service is observed on 61\% of
+expected days. These findings shaped the design of the study: each source is modelled separately,
+results are broken down by schedule type, and long gaps are evaluated on their own
+(Section~\ref{sec:long-gaps}) so that aggregate scores cannot hide failures on the operationally
+important rare events.
 
 \begin{figure*}[t]
 \centering
@@ -267,102 +267,106 @@ of the window is
 \label{eq:ll}
 \log\mathcal{L}=\sum_{i=1}^{n-1}\log p(\dt_{i+1}\mid\mathcal{H}_i)\;+\;\log S(T-t_n\mid\mathcal{H}_n).
 \end{equation}
-The last term is the right-censored ``quiet tail'': we only know that no event happened between
-the last arrival and the end of observation. Setting $T=t_n$ silently drops this term and biases
-every model towards too-short gaps. We therefore always set $T$ to the real end of observation.
+The last term is the right-censored ``quiet tail'', which records only that no event occurred
+between the last arrival and the end of observation. Setting $T=t_n$ silently drops this term and
+biases every model towards gaps that are too short, so we always set $T$ to the real end of
+observation.
 
 \subsection{Splits and censoring}
 Each source is split \emph{chronologically by event count} into 70\% train, 15\% validation and
-15\% test. Splitting by count rather than by calendar time keeps sparse sources (24 monthly events)
-from ending up with an empty test set. The window of each split ends at the first event of the next
-split, so its censored tail is exactly the time until the next split's data begins. The test window
-ends at the study end (1 January 2025). Sources with fewer than five test events are flagged
-\texttt{low\_n}. They are shown in figures but excluded from headline statistics, which leaves
-\SynNValid{} of \SynNSources{} evaluable synthetic sources and \BtsNValid{} of \BtsNSources{} flights.
+15\% test; splitting by count rather than by calendar time prevents sparse sources (24 monthly
+events) from ending up with an empty test set. The window of each split ends at the first event of
+the next split, so that its censored tail is exactly the time until the next split's data begin, and
+the test window ends at the study end (1 January 2025). Sources with fewer than five test events are
+flagged \texttt{low\_n}; they are shown in figures but excluded from headline statistics, which
+leaves \SynNValid{} of \SynNSources{} evaluable synthetic sources and \BtsNValid{} of \BtsNSources{}
+flights.
 
 \subsection{Covariates}
 The neural models receive, for each event, nine calendar covariates computed only from the arrival
-timestamp: hour of day, day of week and month, each as a sine/cosine pair; a weekend flag; a
-business-hours flag; and a US-federal-holiday flag. Cyclical encoding places 23:00 next to
-00:00. Because nothing beyond the timestamp is used, the same features are available in real time.
-The classical models have no slot for covariates by construction.
+timestamp: hour of day, day of week and month, each as a sine/cosine pair, together with weekend,
+business-hours and US-federal-holiday flags. The cyclical encoding places 23:00 next to 00:00, and
+because nothing beyond the timestamp is used, the same features are available in real time. The
+classical models, by construction, have no slot for covariates.
 
 % =====================================================================
 \section{Methods}\label{sec:methods}
 % =====================================================================
 \subsection{Models}
-\paragraph{Poisson.} Constant intensity $\lambda$, estimated by maximum likelihood as
-$\hat\lambda=n/T$, so that $\dt\sim\mathrm{Exp}(\hat\lambda)$ irrespective of history. It is the
-reference against which gains are measured.
+\paragraph{Poisson.} The homogeneous Poisson process has a constant intensity $\lambda$, estimated by
+maximum likelihood as $\hat\lambda=n/T$, so that $\dt\sim\mathrm{Exp}(\hat\lambda)$ irrespective of
+history. It serves as the reference against which all gains are measured.
 
-\paragraph{Hawkes.} $\lambda^*(t)=\mu+\alpha\sum_{t_j<t}e^{-\beta(t-t_j)}$ with branching ratio
-$\alpha/\beta$. The likelihood is evaluated in $O(n)$ with the recursion
+\paragraph{Hawkes.} The Hawkes model has intensity $\lambda^*(t)=\mu+\alpha\sum_{t_j<t}e^{-\beta(t-t_j)}$
+and branching ratio $\alpha/\beta$. Its likelihood is evaluated in $O(n)$ using the recursion
 $R_i=e^{-\beta\dt_i}(1+R_{i-1})$~\citep{ozaki1979maximum} and maximised with Nelder--Mead from five
-starting points. A single start converged to a spurious $\alpha\to0$ optimum on about half of the
-starting points we tried. The predictive survival given the excitation state $R$ just after an event
-has a closed form:
+starting points, because a single start converged to a spurious $\alpha\to0$ optimum on about half of
+the starting points we tried. Given the excitation state $R$ just after an event, the predictive
+survival has the closed form
 \begin{equation}
 S(s)=\exp\!\Big(-\mu s-\tfrac{\alpha R}{\beta}\big(1-e^{-\beta s}\big)\Big).
 \end{equation}
 
-\paragraph{Neural Hawkes (\NHP).} A single-type continuous-time LSTM~\citep{mei2017neural}. After
-event $i$ the cell state relaxes from $c_i$ towards a target $\bar c_i$ at learned rates $\delta_i$:
+\paragraph{Neural Hawkes (\NHP).} We use a single-type continuous-time LSTM~\citep{mei2017neural} in
+which, after event $i$, the cell state relaxes from $c_i$ towards a target $\bar c_i$ at learned
+rates $\delta_i$:
 \begin{equation}
 c(t)=\bar c_i+(c_i-\bar c_i)\,e^{-\delta_i(t-t_i)},\quad h(t)=o_i\odot\tanh c(t),
 \end{equation}
 and $\lambda^*(t)=\mathrm{softplus}(w^\top h(t)+b)$. The input at each event is a Time2Vec embedding
-(dimension 8) of the gap, scaled by the training median, concatenated with the calendar
-covariates. The cell is updated with the hidden and cell states \emph{decayed to the event time}.
-The compensator inside each interval is estimated by Monte Carlo with five uniform points. At
-evaluation time, the survival function is computed by trapezoidal quadrature of $\lambda^*$ on a
-300-point grid.
+(dimension 8) of the gap, scaled by the training median and concatenated with the calendar
+covariates, and the cell is updated using the hidden and cell states \emph{decayed to the event
+time}. The compensator within each interval is estimated by Monte Carlo with five uniform points,
+whereas the predictive survival function used for evaluation is computed by trapezoidal quadrature
+of $\lambda^*$ on a 300-point grid.
 
-\paragraph{\LNM.} The intensity-free model of \citet{shchur2020intensity}. A GRU (hidden size $H$)
-reads the standardised log-gap and the calendar covariates of each event, and its state $h_i$
-parameterises a $K$-component log-normal mixture:
+\paragraph{\LNM.} The intensity-free model of Shchur et al.~\citep{shchur2020intensity} uses a GRU with hidden size
+$H$ that reads the standardised log-gap and the calendar covariates of each event; its state $h_i$
+parameterises a $K$-component log-normal mixture
 \begin{equation}
 p(\dt\mid h_i)=\sum_{k=1}^{K}w_k\,\frac{1}{\dt\,\sigma_k\sqrt{2\pi}}
 \exp\!\Big(-\frac{(\log\dt-\mu_k)^2}{2\sigma_k^2}\Big),
 \end{equation}
-with $(w,\mu,\log\sigma)$ given by a linear head and a softmax over $w$. Likelihood, CDF and
-survival are closed-form. The censored tail uses the state after the last observed gap. We cap
-$\sigma_k\le e$. A looser cap ($e^5$) let a low-weight component spread mass over astronomically
-long gaps and made CRPS diverge. The mixture locations are initialised at the training mean log-gap.
+with $(w,\mu,\log\sigma)$ produced by a linear head and a softmax over $w$, so that likelihood, CDF and
+survival are all available in closed form; the censored tail uses the state after the last observed
+gap. We cap $\sigma_k\le e$, because a looser cap ($e^5$) allowed a low-weight component to spread
+mass over astronomically long gaps and made CRPS diverge, and we initialise the mixture locations at
+the training mean log-gap.
 
 \subsection{Training}\label{sec:training}
-Both neural models are trained per source with Adam~\citep{kingma2015adam} (gradient-norm clip 5),
-early stopping on validation NLL (patience 20 epochs, minimum improvement $10^{-4}$), and restoring
-the best validation weights. Sequence lengths range from tens to 17,544 events. A full unroll of the
-CT-LSTM on the hourly source took about 30\,s per gradient step, so long sequences are trained with
-truncated back-propagation through time~\citep{williams1990efficient}. Each window holds about 128
-events, preceded by 32 burn-in events that warm up the recurrent state without contributing to the
-loss. Windows are shuffled and batched 16 at a time. Sequences shorter than 256 events form a single
-window and use the exact objective of Eq.~\eqref{eq:ll}, including the censored tail. Two
-initialisations stabilise training: \NHP{} starts with the intensity bias at the training rate
-($\mathrm{softplus}(b)=1/\overline{\dt}$), and \LNM{} standardises its log-gap input with training
-statistics. All runs use CPU, one thread and fixed seeds; \LNM{} is run with \SynLogNormMixSeeds{}
-seeds and \NHP{} with \SynNHPSeeds{}.
+Both neural models are trained per source with Adam~\citep{kingma2015adam} (gradient-norm clip 5) and
+early stopping on validation NLL (patience 20 epochs, minimum improvement $10^{-4}$), after which the
+best validation weights are restored. Because sequence lengths range from tens of events to 17,544,
+and a full unroll of the CT-LSTM on the hourly source took about 30\,s per gradient step, long
+sequences are trained with truncated back-propagation through time~\citep{williams1990efficient}.
+Each window holds about 128 events and is preceded by 32 burn-in events that warm up the recurrent
+state without contributing to the loss, and windows are shuffled and batched 16 at a time. Sequences
+shorter than 256 events form a single window and use the exact objective of Eq.~\eqref{eq:ll},
+including the censored tail. Two initialisations stabilise training: \NHP{} starts with its intensity
+bias at the training rate ($\mathrm{softplus}(b)=1/\overline{\dt}$), and \LNM{} standardises its
+log-gap input with training statistics. All runs use a single CPU thread and fixed seeds, with \LNM{}
+trained over \SynLogNormMixSeeds{} seeds and \NHP{} over \SynNHPSeeds{}.
 
 \subsection{Hyper-parameter selection}
-Configurations are compared on \emph{validation} NLL only, on the synthetic sources with at least ten
-validation events. For each source we average the best validation loss over seeds and take the
-difference from a reference configuration. A configuration replaces the reference only if its mean
-difference is more than two standard errors below zero. Otherwise it counts as a tie and the
-cheaper setting is kept. Table~\ref{tab:tuning} lists the candidates. Validation losses are
-comparable only between runs with the same windowing, so window length and burn-in were fixed.
+Configurations are compared on \emph{validation} NLL only, using the synthetic sources with at least
+ten validation events. For each source we average the best validation loss over seeds and take its
+difference from a reference configuration; a candidate replaces the reference only if the mean
+difference is more than two standard errors below zero, and otherwise it is treated as a tie and the
+cheaper setting is kept. Table~\ref{tab:tuning} lists the candidates. Because validation losses are
+comparable only between runs with the same windowing, window length and burn-in were held fixed.
 
 \subsection{Evaluation}
-Each test event is scored with the model state replayed through \emph{all} preceding events: the
-Hawkes excitation $R$, and the GRU or CT-LSTM state from the full train+validation history. Resetting
-the state at the test boundary would discard exactly the information the models are meant to
-exploit. Every model exposes only \texttt{cdf()} and \texttt{log\_prob()}, and all metrics are
-computed from these:
+Each test event is scored with the model state replayed through \emph{all} preceding events, namely
+the Hawkes excitation $R$ and the GRU or CT-LSTM state carried through the full train+validation
+history; resetting the state at the test boundary would discard exactly the information the models
+are meant to exploit. Every model exposes only \texttt{cdf()} and \texttt{log\_prob()}, and all
+metrics are computed from these two functions:
 \begin{itemize}
 \item \textbf{NLL}: mean $-\log p(\dt)$ over completed test gaps (nats, time in hours).
 \item \textbf{CRPS}: $\int_0^\infty(F(t)-\mathbb{1}[t\ge y])^2dt$~\citep{matheson1976scoring}, by
-  adaptive log-spaced quadrature with controlled tail error. The same estimator is used for all
-  models, so no model benefits from a closed-form shortcut. It is verified against the closed form
-  for exponential distributions to $<0.2\%$.
+  adaptive log-spaced quadrature with controlled tail error. The same estimator is applied to every
+  model, so that none benefits from a closed-form shortcut, and it agrees with the closed form for
+  exponential distributions to within 0.2\%.
 \item \textbf{PICP}: observed coverage of the central 50/80/90\% predictive intervals, together with
   PIT histograms~\citep{dawid1984present}.
 \item \textbf{SLA-hit}: accuracy of predicting whether the next gap is $\le$24\,h, using
@@ -370,28 +374,28 @@ computed from these:
 \item \textbf{MAE / lag-1}: MAE of the predictive median divided by the MAE of the naive ``same gap
   as last time'' forecast.
 \end{itemize}
-Raw NLL and CRPS scale with a source's cadence. Cross-source summaries therefore use the \emph{NLL
+Because raw NLL and CRPS scale with a source's cadence, cross-source summaries use the \emph{NLL
 gain} over Poisson, $\nll_{\text{Poisson}}-\nll_{\text{model}}$ (nats/event, invariant to the time
 unit), and the \emph{CRPS skill} $1-\crps/\crps_{\text{Poisson}}$. Models are compared with paired
-Wilcoxon signed-rank tests across sources~\citep{wilcoxon1945individual}. Because the sources are
-designed rather than sampled, the $p$-values are descriptive.
+Wilcoxon signed-rank tests across sources~\citep{wilcoxon1945individual}; since the sources were
+designed rather than sampled, the resulting $p$-values should be read as descriptive.
 
 \subsection{System design}
 The study is implemented as an installable Python package (PyTorch~\citep{paszke2019pytorch}) with a
-single command-line entry point. Its components are a data pipeline (synthetic generator and BTS
+single command-line entry point. It comprises a data pipeline (synthetic generator and BTS
 extractor), a resumable experiment runner that caches each (source, model, seed) unit, a tuning
 summariser, a report generator that writes every table, figure and in-text number of this paper, and
-an inference module. Experimental hygiene is enforced in code:
+an inference module, and it enforces experimental hygiene in code:
 \begin{itemize}
 \item BTS runs require settings frozen from a synthetic run (\texttt{--freeze-from});
 \item a frozen run rejects any training flag;
 \item reusing a run name with different settings is refused;
 \item default run names are hashes of the configuration.
 \end{itemize}
-A test suite of 51 tests (closed-form and brute-force likelihood checks, determinism, checkpoint
-round-trips and an end-to-end CLI run) runs in continuous integration. We also re-ran the packaged
-code and recovered the archived metrics exactly for the classical models on all sources and for
-\LNM{} (seed 0) on a sample of five sources.
+A suite of 51 tests, covering closed-form and brute-force likelihood checks, determinism, checkpoint
+round-trips and an end-to-end CLI run, runs in continuous integration. Re-running the packaged code
+reproduced the archived metrics exactly for the classical models on all sources and for \LNM{}
+(seed 0) on a sample of five sources.
 
 % =====================================================================
 \section{Results}\label{sec:results}
@@ -401,50 +405,46 @@ Table~\ref{tab:tuning} summarises the search. For \LNM{}, lowering the learning 
 $3\cdot10^{-3}$ improved validation NLL on 17 of 20 sources ($\Delta=-0.255\pm0.050$), whereas a
 larger hidden state or eight mixture components were slightly worse. For \NHP{} the lower learning
 rate was worse on 18 of 20 sources and hit the epoch cap more often, so the reference rate
-$10^{-2}$ was kept, with a larger epoch budget (600). The final configuration is $H=32$, $K=4$ and
-$\eta_{\text{LNM}}=3\cdot10^{-3}$, and it was frozen before any BTS result was computed.
+$10^{-2}$ was kept together with a larger epoch budget (600). The final configuration, $H=32$, $K=4$
+and $\eta_{\text{LNM}}=3\cdot10^{-3}$, was frozen before any BTS result was computed.
 
 \input{generated/tab_tuning.tex}
 
-\paragraph{From the preliminary to the final run.} An earlier, preliminary pass shaped several of
-the methods above.
-\begin{itemize}
-\item \emph{Training was capped.} \NHP{} was trained with full-sequence gradient steps capped at 50
-  steps, and it hit the cap on 20 of 25 sources. Its median test NLL there (2.89 nats/gap) was
-  therefore a lower bound on its ability. Moving to windowed truncated BPTT with early stopping (600
-  epochs) brought its median NLL down to \SynNHPNllMed{}.
-\item \emph{LogNormMix improved.} Tuning its learning rate and capping $\sigma_k$ improved \LNM{} from
-  1.57 to \SynLogNormMixNllMed{}. Poisson and Hawkes were unchanged at \SynPoissonNllMed{}.
-\item \emph{The ranking held.} \LNM{} had the lowest NLL on every source then and on
-  \SynLogNormMixBestNLL{}/\SynNValid{} now, so its lead survives a fair training budget for \NHP{}.
-\item \emph{The CRPS gap closed.} The CRPS advantage that \LNM{} showed in the preliminary pass (best on
-  16 sources) disappears once \NHP{} is trained to convergence (Section~\ref{sec:syn-results}).
-\end{itemize}
+\paragraph{From the preliminary to the final run.} A preliminary pass shaped several of the methods
+described above. In that pass \NHP{} was trained with full-sequence gradient steps capped at 50 and
+hit the cap on 20 of 25 sources, so its median test NLL of 2.89 nats/gap understated what the model
+could achieve; moving to windowed truncated BPTT with early stopping (600 epochs) brought its median
+NLL down to \SynNHPNllMed{}. Tuning the learning rate and capping $\sigma_k$ likewise improved \LNM{}
+from 1.57 to \SynLogNormMixNllMed{}, while Poisson and Hawkes were unchanged at \SynPoissonNllMed{}.
+The NLL ranking held: \LNM{} had the lowest NLL on every source in the preliminary pass and has it on
+\SynLogNormMixBestNLL{}/\SynNValid{} in the final one, so its lead survives a fair training budget for
+\NHP{}. Its CRPS advantage in the preliminary pass (best on 16 sources), however, disappears once
+\NHP{} is trained to convergence (Section~\ref{sec:syn-results}).
 
 \subsection{Synthetic sources}\label{sec:syn-results}
 \input{generated/tab_scoreboard_syn.tex}
 
 Table~\ref{tab:scoreboard-syn} gives the test-set scoreboard over the \SynNValid{} evaluable
-synthetic sources (\SynNTestEvents{} test gaps). Both neural models beat Poisson on every source in
-NLL. \LNM{} is the clear NLL winner: it has the lowest NLL on \SynLogNormMixBestNLL{} of
-\SynNValid{} sources, a median gain of \SynLogNormMixGain{} nats/event over Poisson, and a mean rank
-of \SynLogNormMixRank. Against \NHP{} it is better on \SynNllLogNormMixVsNHPWins{} sources by a
-median \SynNllLogNormMixVsNHPEffect{} nats/event (Table~\ref{tab:paired}).
+synthetic sources (\SynNTestEvents{} test gaps). Both neural models beat Poisson in NLL on every
+source, and \LNM{} is the clear NLL winner, with the lowest NLL on \SynLogNormMixBestNLL{} of
+\SynNValid{} sources, a median gain of \SynLogNormMixGain{} nats/event over Poisson and a mean rank of
+\SynLogNormMixRank. Against \NHP{} it is better on \SynNllLogNormMixVsNHPWins{} sources, by a median
+of \SynNllLogNormMixVsNHPEffect{} nats/event (Table~\ref{tab:paired}).
 
-CRPS ranks the two neural models differently. \NHP{} wins \SynNHPBestCRPS{} sources and \LNM{}
-\SynLogNormMixBestCRPS{}, with median skills of \SynNHPSkill{} and \SynLogNormMixSkill{}, and the
+CRPS ranks the two neural models differently: \NHP{} wins \SynNHPBestCRPS{} sources and \LNM{}
+\SynLogNormMixBestCRPS{}, their median skills are \SynNHPSkill{} and \SynLogNormMixSkill{}, and the
 paired test cannot separate them ($p=\SynCrpsLogNormMixVsNHPP$). Figure~\ref{fig:heatmap} shows where
-the disagreement comes from. On most calendar-driven sources (SRC\_02--SRC\_11) and on SRC\_21, 22
-and 26, \NHP{} has the better CRPS but the worse NLL. Its predictive distributions are
-wide and centred well, which CRPS rewards. \LNM{} concentrates mass sharply on the dominant mode,
-which NLL rewards but which costs CRPS when an occasional gap falls in a minor mode.
+the disagreement arises. On most calendar-driven sources (SRC\_02--SRC\_11) and on SRC\_21, 22 and
+26, \NHP{} has the better CRPS but the worse NLL, because its predictive distributions are wide but
+well centred, which CRPS rewards. \LNM{} instead concentrates its mass sharply on the dominant mode,
+which NLL rewards but which costs CRPS whenever an occasional gap falls in a minor mode.
 
 The Hawkes process adds nothing. Its fitted branching ratio is below $10^{-3}$ on
-\SynHawkesDegenerate{} of \SynHawkesFitted{} sources, where it reduces exactly to Poisson. It differs
-meaningfully only on SRC\_11 (business-hours bursts, branching ratio 0.54), SRC\_24 (the
+\SynHawkesDegenerate{} of \SynHawkesFitted{} sources, where it reduces exactly to Poisson, and it
+differs meaningfully only on SRC\_11 (business-hours bursts, branching ratio 0.54), SRC\_24 (the
 Hawkes-generated source) and SRC\_25 (Pareto gaps). Even on SRC\_24, which was generated by a
-self-exciting mechanism, its NLL gain is only 0.03 nats/event. Section~\ref{sec:hawkes} shows that
-this is a model mismatch, not a fitting error.
+self-exciting mechanism, its NLL gain is only 0.03 nats/event; Section~\ref{sec:hawkes} shows that
+this reflects a model mismatch rather than a fitting error.
 
 \begin{figure*}[t]
 \centering
@@ -458,26 +458,26 @@ statistics). On quarterly SRC\_05 (8 events, 1 test event) both neural models ov
 \input{generated/tab_groups.tex}
 
 \paragraph{By schedule type.} Table~\ref{tab:groups} breaks the NLL gain down by group. \LNM{} gains
-about 3--4 nats/event on every structured group and is strongest on low-frequency sources, where
-\NHP{} is weakest (+1.23). On the monthly SRC\_04 and SRC\_16 and the bi-weekly SRC\_15, \NHP's
-validation loss never improved after the first epoch for several seeds, so it stayed close to its
-Poisson-like initialisation. \LNM{} overfit SRC\_05 and was unstable across seeds there (NLL s.d.\ 9.4). The only
-source on which neither model gains much is the heavy-tailed SRC\_25 (+0.22 and +0.69). With
-i.i.d.\ Pareto gaps there is no history to exploit, and \LNM{} gains only by fitting the marginal
-shape better than an exponential.
+about 3--4 nats/event on every structured group and is strongest on low-frequency sources, which is
+precisely where \NHP{} is weakest (+1.23): on the monthly SRC\_04 and SRC\_16 and the bi-weekly
+SRC\_15, \NHP's validation loss never improved after the first epoch for several seeds, so the model
+remained close to its Poisson-like initialisation. \LNM{}, for its part, overfit SRC\_05 and was
+unstable across seeds there (NLL s.d.\ 9.4). The only source on which neither model gains much is
+the heavy-tailed SRC\_25 (+0.22 and +0.69): with i.i.d.\ Pareto gaps there is no history to exploit,
+and \LNM{} gains only by fitting the marginal shape better than an exponential.
 
 \input{generated/tab_paired.tex}
 
 \subsection{Calibration}
-Figure~\ref{fig:calibration} and the PIT histograms in Figure~\ref{fig:pit} show the starkest
-difference between the models. \LNM{} is close to calibrated: its median observed coverage is
+Figure~\ref{fig:calibration} and the PIT histograms in Figure~\ref{fig:pit} reveal the starkest
+difference between the models. \LNM{} is close to calibrated, with median observed coverage of
 \SynLogNormMixCovFifty{}, \SynLogNormMixCovEighty{} and \SynLogNormMixCovNinety{} at the 50, 80 and
-90\% levels, and its PIT histogram is nearly flat. The three intensity-based models are severely
-under-confident. Their 50\% intervals cover \SynNHPCovFifty--\SynPoissonCovFifty{} of outcomes and
-their 80\% intervals essentially all of them. Their PIT histograms are humped, meaning the true gaps
-sit in the middle of distributions that are far too wide. For Poisson and Hawkes this is structural:
-an exponential distribution with the right mean is far wider than a near-deterministic daily
-schedule. For \NHP{} it reflects the difficulty of forming a sharp, unimodal density from an
+90\% levels and a nearly flat PIT histogram. The three intensity-based models, by contrast, are
+severely under-confident: their 50\% intervals cover \SynNHPCovFifty--\SynPoissonCovFifty{} of
+outcomes, their 80\% intervals essentially all of them, and their humped PIT histograms show that the
+true gaps sit in the middle of distributions that are far too wide. For Poisson and Hawkes this is
+structural, since an exponential distribution with the correct mean is far wider than a
+near-deterministic daily schedule. For \NHP{} it reflects the difficulty of forming a sharp, unimodal density from an
 intensity that must first rise from near zero and then fall, within a softplus-of-linear head.
 
 \begin{figure*}[t]
@@ -498,44 +498,41 @@ wide; mass at the edges = too narrow.}
 \end{figure}
 
 \subsection{Point forecasts and SLA decisions}
-Operational users often want a single time and a yes/no answer. Using the predictive median as the
-point forecast, the typical (median over sources) absolute error is:
-\begin{itemize}
-\item \LNM{} \SynLogNormMixMae\,h and \NHP{} \SynNHPMae\,h;
-\item Poisson \SynPoissonMae\,h;
-\item the naive ``same gap as last time'' rule \SynLagMae\,h.
-\end{itemize}
-\LNM{} beats that lag-1 rule on \SynLogNormMixBeatsLag{} of \SynNValid{} sources (median MAE ratio
-\SynLogNormMixMaeRatio), \NHP{} on \SynNHPBeatsLag{}, and Poisson and Hawkes on only
-\SynPoissonBeatsLag{} (Figure~\ref{fig:mae}). The classical models lose mainly on near-regular feeds.
-For a daily file the exponential median is $24\ln 2\approx16.6$\,h, about 7.4\,h off every time,
-whereas repeating the last gap is off by about half an hour. On point accuracy the two neural models
-are statistically tied: \LNM{} has the smaller MAE on \SynMaeLogNormMixVsNHPWins{} sources
-($p=\SynMaeLogNormMixVsNHPP$).
+Operational users often want a single time and a yes/no answer. Taking the predictive median as the
+point forecast, the typical (median over sources) absolute error is \SynLogNormMixMae\,h for \LNM{}
+and \SynNHPMae\,h for \NHP{}, compared with \SynPoissonMae\,h for Poisson and \SynLagMae\,h for the
+naive ``same gap as last time'' rule. \LNM{} beats this lag-1 rule on \SynLogNormMixBeatsLag{} of
+\SynNValid{} sources (median MAE ratio \SynLogNormMixMaeRatio) and \NHP{} on \SynNHPBeatsLag{},
+whereas Poisson and Hawkes beat it on only \SynPoissonBeatsLag{} (Figure~\ref{fig:mae}). The
+classical models lose mainly on near-regular feeds: for a daily file the exponential median is
+$24\ln 2\approx16.6$\,h, about 7.4\,h off every time, whereas repeating the last gap is off by about
+half an hour. On point accuracy the two neural models are statistically tied, with \LNM{} achieving
+the smaller MAE on \SynMaeLogNormMixVsNHPWins{} sources ($p=\SynMaeLogNormMixVsNHPP$).
 
-Table~\ref{tab:group-mae} shows why the overall medians are close. \NHP{} makes the sharper single
-guess on calendar-driven (0.50 vs.\ 4.22\,h), bursty and perturbed feeds, which are the schedules
-whose next gap is set by the calendar. \LNM{} is far more accurate on low-frequency feeds (2.81 vs.\
-19.03\,h) and on the heavy-tailed feed. On low-frequency feeds, simply repeating the last gap
-(2.07\,h) beats both neural models. This is a useful default for sources with little history. Each
-group holds only one to seven sources, so these are patterns, not firm conclusions.
+Table~\ref{tab:group-mae} explains why the overall medians are so close. \NHP{} makes the sharper
+single guess on calendar-driven (0.50 vs.\ 4.22\,h), bursty and perturbed feeds, the schedules whose
+next gap is set by the calendar, whereas \LNM{} is far more accurate on low-frequency feeds (2.81
+vs.\ 19.03\,h) and on the heavy-tailed feed. On low-frequency feeds, simply repeating the last gap
+(2.07\,h) beats both neural models, which makes it a useful default for sources with little history.
+Because each group holds only one to seven sources, these differences should be read as patterns
+rather than firm conclusions.
 
 \input{generated/tab_group_mae.tex}
 
-\paragraph{The 24-hour SLA check.} Across the \SynNValid{} synthetic sources the median share of
+\paragraph{The 24-hour SLA check.} Across the \SynNValid{} synthetic sources, the median share of
 correct ``arrives within 24\,h'' calls is \SynLogNormMixSlaAccMed\% for \LNM{}, \SynNHPSlaAccMed\% for
 \NHP{} and \SynPoissonSlaAccMed\% for Poisson and Hawkes. The constant-rate models catch
-\SynPoissonSlaRecMed\% of on-time files, but only because they predict ``on time'' for every file
-(precision \SynPoissonSlaPrecMed\%). Such a model would never warn of a late file. \LNM{} trades some
-recall (\SynLogNormMixSlaRecMed\%) for the highest precision (\SynLogNormMixSlaPrecMed\%). On the
+\SynPoissonSlaRecMed\% of on-time files only because they predict ``on time'' for every file
+(precision \SynPoissonSlaPrecMed\%), so they would never warn of a late one; \LNM{} trades some recall
+(\SynLogNormMixSlaRecMed\%) for the highest precision (\SynLogNormMixSlaPrecMed\%). On the
 \SynNInformative{} sources where the question is not trivial (Poisson accuracy below 0.95), the mean
 accuracy is \SynLogNormMixSlaAcc{} for \LNM{}, \SynNHPSlaAcc{} for \NHP{} and \SynPoissonSlaAcc{} for
 Poisson.
 
-Figure~\ref{fig:example} illustrates the practical difference on the outage-prone SRC\_19. Poisson's
-50\% interval spans roughly 7--35\,h for a file that arrives about every 24\,h, whereas \LNM's
-interval is well under an hour wide. Neither model anticipates the random outages (the two 48\,h
-gaps), which are unpredictable by construction.
+Figure~\ref{fig:example} illustrates the practical difference on the outage-prone SRC\_19: Poisson's
+50\% interval spans roughly 7--35\,h for a file that arrives about every 24\,h, whereas \LNM's is
+well under an hour wide. Neither model anticipates the random outages (the two 48\,h gaps), which are
+unpredictable by construction.
 
 \begin{figure*}[t]
 \centering
@@ -557,39 +554,37 @@ bar = median). Below 1 beats ``same gap as last time''.}
 \input{generated/tab_scoreboard_bts.tex}
 
 Table~\ref{tab:scoreboard-bts} applies the frozen configuration to the \BtsNValid{} evaluable
-flight numbers (\BtsNTestEvents{} test gaps). \LNM's advantage carries over and widens. It has the
-lowest NLL on \BtsLogNormMixBestNLL{} of \BtsNValid{} flights and the lowest CRPS on
+flight numbers (\BtsNTestEvents{} test gaps), and \LNM's advantage not only carries over but widens.
+It has the lowest NLL on \BtsLogNormMixBestNLL{} of \BtsNValid{} flights and the lowest CRPS on
 \BtsLogNormMixBestCRPS{}, with a median NLL gain of \BtsLogNormMixGain{} nats/event and a CRPS skill
-of \BtsLogNormMixSkill{}. It beats \NHP{} on \BtsNllLogNormMixVsNHPWins{} flights in NLL and
+of \BtsLogNormMixSkill{}; it beats \NHP{} on \BtsNllLogNormMixVsNHPWins{} flights in NLL and
 \BtsCrpsLogNormMixVsNHPWins{} in CRPS ($p<0.001$ for both), and it beats the lag-1 forecast on
-\BtsLogNormMixBeatsLag{} of \BtsNValid{} flights. \NHP{} degrades much more. Its median gain over
+\BtsLogNormMixBeatsLag{} of \BtsNValid{} flights. \NHP{} degrades much more: its median gain over
 Poisson falls to \BtsNHPGain{} nats/event, and it is better than Poisson on only
-\BtsNllNHPVsPoissonWins{} flights, which is not significant ($p=\BtsNllNHPVsPoissonP$;
+\BtsNllNHPVsPoissonWins{} flights, a difference that is not significant ($p=\BtsNllNHPVsPoissonP$;
 Figure~\ref{fig:bts}). Hawkes again collapses to Poisson on all \BtsHawkesFitted{} fitted flights.
 
-In hours, \LNM's typical error on flights is \BtsLogNormMixMae\,h, against \BtsNHPMae\,h for \NHP{},
-\BtsPoissonMae\,h for Poisson and \BtsLagMae\,h for the lag-1 rule. \LNM{} has the smaller MAE than
-\NHP{} on \BtsMaeLogNormMixVsNHPWins{} flights ($p<0.001$). So on real data the tie in point accuracy
-seen on synthetic sources is broken in \LNM's favour. \NHP's failures are concentrated:
-\begin{itemize}
-\item it is more than one nat worse than Poisson on \BtsNHPBigLoss{} flights;
-\item those flights pull its \emph{mean} NLL (\BtsNHPNllMean) above Poisson's (\BtsPoissonNllMean),
-  even though its \emph{median} (\BtsNHPNllMed) is lower (\BtsPoissonNllMed).
-\end{itemize}
-A typical flight number has only \BtsMedianTestEvents{} test arrivals (\SynMedianTestEvents{} for a
-synthetic source) and about 120 training arrivals. One plausible explanation is that the larger
-CT-LSTM has too little data to learn a robust intensity; we have not tested this directly.
-\LNM's SLA accuracy on flights is also modest (median \BtsLogNormMixSlaAccMed\% vs.\
-\BtsPoissonSlaAccMed\% for Poisson). Many flight numbers run on a cycle of almost exactly 24\,h, so a
-24-hour deadline sits on top of the normal gap and a few minutes of delay flip the answer. A deadline
-with a margin would be a fairer operational test.
+Measured in hours, \LNM's typical error on flights is \BtsLogNormMixMae\,h, against \BtsNHPMae\,h for
+\NHP{}, \BtsPoissonMae\,h for Poisson and \BtsLagMae\,h for the lag-1 rule, and \LNM{} has the
+smaller MAE on \BtsMaeLogNormMixVsNHPWins{} flights ($p<0.001$); on real data, therefore, the tie in
+point accuracy seen on synthetic sources is broken in \LNM's favour. \NHP's failures are concentrated
+on a few flights. It is more than one nat worse than Poisson on \BtsNHPBigLoss{} of them, and these
+pull its \emph{mean} NLL (\BtsNHPNllMean) above Poisson's (\BtsPoissonNllMean) even though its
+\emph{median} (\BtsNHPNllMed) is lower (\BtsPoissonNllMed). A typical flight number has only
+\BtsMedianTestEvents{} test arrivals (\SynMedianTestEvents{} for a synthetic source) and about 120
+training arrivals, and one plausible explanation, which we have not tested directly, is that the
+larger CT-LSTM has too little data to learn a robust intensity. \LNM's SLA accuracy on flights is
+also modest (median \BtsLogNormMixSlaAccMed\% vs.\ \BtsPoissonSlaAccMed\% for Poisson). Many flight
+numbers run on a cycle of almost exactly 24\,h, so a 24-hour deadline sits on top of the normal gap
+and a few minutes of delay flip the answer; a deadline with a margin would be a fairer operational
+test.
 
-\LNM's calibration also shifts. On flights its intervals become moderately \emph{over}-confident
-(80\% coverage \BtsLogNormMixCovEighty{}), and its PIT histogram has excess mass at the left edge,
-i.e.\ some gaps are shorter than predicted (Figure~\ref{fig:pit}). The likely causes are schedule
-changes inside the test period, such as departure-time shifts, which a model trained on the first
-70\% of a flight's history has not seen. A recalibration step on recent data would address this
-(Section~\ref{sec:discussion}).
+\LNM's calibration also shifts on flights, where its intervals become moderately
+\emph{over}-confident (80\% coverage \BtsLogNormMixCovEighty{}) and its PIT histogram has excess mass
+at the left edge, indicating that some gaps are shorter than predicted (Figure~\ref{fig:pit}). The
+likely cause is schedule changes within the test period, such as departure-time shifts, which a
+model trained on the first 70\% of a flight's history has not seen; a recalibration step on recent
+data would address this (Section~\ref{sec:discussion}).
 
 \begin{figure*}[t]
 \centering
@@ -600,17 +595,17 @@ range; bar = median). \NHP{} is better than Poisson on most flights but loses he
 \end{figure*}
 
 \subsection{Where models fail: unusually long gaps}\label{sec:long-gaps}
-Average scores can hide failures on rare events, and for monitoring the rare long gaps are the
-events that matter. Figure~\ref{fig:gaps} splits test gaps by their length relative to the source's
-median gap. On synthetic data both neural models keep a large gain on long gaps ($>2\times$ the
-median: \SynGapBinLogNormMixVeryLong{} for \LNM, \SynGapBinNHPVeryLong{} for \NHP). On flights,
-where long gaps come from cancellations and suspended services, \NHP{} collapses
-(\BtsGapBinNHPVeryLong{} nats/event). Its learned intensity decays to almost zero after the usual
-24\,h, so a multi-day gap receives a vanishing survival probability. \LNM{} also loses to Poisson
-on these gaps (\BtsGapBinLogNormMixVeryLong{}), but by an order of magnitude less, because its
-mixture keeps a wide component. This failure mode explains \NHP's weak aggregate result on BTS. It
-also argues for an explicit ``outage'' component, or for robust mixing with a heavy-tailed fallback,
-in production.
+Average scores can hide failures on rare events, and for monitoring it is precisely the rare long
+gaps that matter. Figure~\ref{fig:gaps} therefore splits test gaps by their length relative to the
+source's median gap. On synthetic data both neural models retain a large gain on long gaps
+($>2\times$ the median: \SynGapBinLogNormMixVeryLong{} for \LNM, \SynGapBinNHPVeryLong{} for \NHP),
+but on flights, where long gaps arise from cancellations and suspended services, \NHP{} collapses
+(\BtsGapBinNHPVeryLong{} nats/event). Its learned intensity decays almost to zero after the usual
+24\,h, so a multi-day gap receives a vanishing survival probability. \LNM{} also loses to Poisson on
+these gaps (\BtsGapBinLogNormMixVeryLong{}), but by an order of magnitude less, because its mixture
+retains a wide component. This failure mode accounts for \NHP's weak aggregate result on BTS and, for
+production use, argues for an explicit ``outage'' component or robust mixing with a heavy-tailed
+fallback.
 
 \begin{figure*}[t]
 \centering
@@ -621,33 +616,32 @@ on a symlog scale). On flights, \NHP{} fails catastrophically on gaps longer tha
 \end{figure*}
 
 \subsection{Why the Hawkes process finds no self-excitation}\label{sec:hawkes}
-SRC\_24 was generated to be self-exciting. It has one main file per day at a random time, and each
-main file triggers a single follow-up within four hours with probability 0.4. Follow-ups do not
-trigger further files. The data match the design. Of \HkDaysTotal{} days, \HkDaysOne{} have one
-file and \HkDaysTwo{} have two (37\%), so across all \HkFiles{} files the true number of follow-ups
-per file, the quantity comparable to the branching ratio $\alpha/\beta$, is about \HkTrueRatio.
-The fitted Hawkes process estimates only \HkFitRatio. We ran two checks to rule out an
+SRC\_24 was generated to be self-exciting: it has one main file per day at a random time, each main
+file triggers a single follow-up within four hours with probability 0.4, and follow-ups trigger no
+further files. The data match this design. Of \HkDaysTotal{} days, \HkDaysOne{} have one file and
+\HkDaysTwo{} have two (37\%), so across all \HkFiles{} files the true number of follow-ups per file,
+which is the quantity comparable to the branching ratio $\alpha/\beta$, is about \HkTrueRatio. The
+fitted Hawkes process nevertheless estimates only \HkFitRatio, and we ran two checks to rule out an
 implementation error (Figure~\ref{fig:hawkes}).
-\begin{itemize}
-\item \emph{Recovery.} We simulated \HkSimN{} feeds of the same size (about \HkSimEvents{} events)
-  from an exponential-kernel Hawkes process with a \emph{constant} background and a true branching
-  ratio of \HkSimTrue. The same fitting code recovers it: mean \HkSimMean, range
-  \HkSimMin--\HkSimMax.
-\item \emph{Profile likelihood.} Fixing the branching ratio on a grid and maximising over $(\mu,\beta)$
-  shows that SRC\_24's training likelihood peaks at about \HkProfileBest{}. At the design value of
-  \HkTrueRatio{} it is \HkProfileDeltaTrue{} log-likelihood units lower. The low estimate is
-  therefore what the data support \emph{under this model}, not a local optimum.
-\end{itemize}
 
-The mechanism is the background. The Hawkes model assumes that main files arrive at random, but
+In a recovery experiment, we simulated \HkSimN{} feeds of the same size (about \HkSimEvents{}
+events) from an exponential-kernel Hawkes process with a \emph{constant} background and a true
+branching ratio of \HkSimTrue; the same fitting code recovers this value, with a mean estimate of
+\HkSimMean{} and a range of \HkSimMin--\HkSimMax. A profile likelihood, obtained by fixing the
+branching ratio on a grid and maximising over $(\mu,\beta)$, shows that SRC\_24's training likelihood
+peaks at about \HkProfileBest{} and is \HkProfileDeltaTrue{} log-likelihood units lower at the design
+value of \HkTrueRatio. The low estimate is therefore what the data support \emph{under this model},
+not a local optimum.
+
+The cause lies in the background. The Hawkes model assumes that main files arrive at random, whereas
 SRC\_24's main files arrive like clockwork, once a day. A memoryless background at the fitted rate
-($\hat\mu=\HkFitMu$/h) would already produce gaps shorter than four hours \HkShortBg\% of the time
-by chance. The training data contain \HkShortObs\%. The model attributes most short gaps to chance
-and has little left to explain with excitation. The same mismatch plausibly explains the collapse
-on flights, which also run on a daily schedule. A Hawkes process with a calendar-dependent background
-$\mu(t)$ would be the natural fix; we leave it to future work. The branching ratio of 0.96 on the
-Pareto source SRC\_25 is a warning sign of the opposite kind. Long quiet spells followed by clusters
-of short gaps mimic a near-critical self-exciting process.
+($\hat\mu=\HkFitMu$/h) would by chance already produce gaps shorter than four hours \HkShortBg\% of
+the time, against \HkShortObs\% in the training data, so the model attributes most short gaps to
+chance and has little left to explain through excitation. The same mismatch plausibly explains the
+collapse on flights, which also follow a daily schedule; a Hawkes process with a calendar-dependent
+background $\mu(t)$ would be the natural remedy, and we leave it to future work. The branching ratio
+of 0.96 on the Pareto source SRC\_25 is a warning sign of the opposite kind, since long quiet spells
+followed by clusters of short gaps mimic a near-critical self-exciting process.
 
 \begin{figure*}[t]
 \centering
@@ -662,79 +656,72 @@ background is random, but not when it is periodic.}
 
 \subsection{Cost and stability}
 \input{generated/tab_training.tex}
-Table~\ref{tab:training} reports training cost. A synthetic \NHP{} run takes a median
-\SynNHPSecPerRun\,s, against \SynLogNormMixSecPerRun\,s for \LNM{}. The full synthetic study took
-\SynNHPTotalMin{} CPU-minutes for \SynNHPRuns{} \NHP{} runs and \SynLogNormMixTotalMin{} minutes
-for \SynLogNormMixRuns{} \LNM{} runs. The gap comes from the sequential CT-LSTM loop and the Monte
-Carlo compensator, which \LNM{} avoids. \SynNHPHitCap{} \NHP{} and \SynLogNormMixHitCap{} \LNM{}
-runs ended at the epoch cap, so a few models may be slightly under-trained. Seed variability is
-small compared with the differences between models: the median standard deviation of test NLL
-across seeds is 0.14 (\NHP) and 0.16 (\LNM) nats/event on synthetic data, and 0.18 and 0.45 on
-flights.
+Table~\ref{tab:training} reports training cost. A synthetic \NHP{} run takes a median of
+\SynNHPSecPerRun\,s against \SynLogNormMixSecPerRun\,s for \LNM{}, and the full synthetic study took
+\SynNHPTotalMin{} CPU-minutes for \SynNHPRuns{} \NHP{} runs and \SynLogNormMixTotalMin{} minutes for
+\SynLogNormMixRuns{} \LNM{} runs. The difference stems from the sequential CT-LSTM loop and the Monte
+Carlo compensator, both of which \LNM{} avoids. Because \SynNHPHitCap{} \NHP{} and
+\SynLogNormMixHitCap{} \LNM{} runs ended at the epoch cap, a few models may be slightly
+under-trained. Seed variability is small relative to the differences between models: the median
+standard deviation of test NLL across seeds is 0.14 (\NHP) and 0.16 (\LNM) nats/event on synthetic
+data, and 0.18 and 0.45 on flights.
 
 % =====================================================================
 \section{Discussion and Limitations}\label{sec:discussion}
 % =====================================================================
-\paragraph{Main findings.} First, regular schedules are not memoryless. Both neural models improve
-on Poisson by 2--4 nats/event, which corresponds to predictive densities that are on average
-(geometric mean) $e^{2}$--$e^{4}$ times higher at the observed gap. Second, on this kind of data an intensity-free density model is the
-better inductive bias. \LNM{} wins on likelihood, calibration and cost. It ties \NHP{} on point accuracy on
-synthetic data and beats it on flights, and it transfers to real data without re-tuning (although
-it becomes somewhat over-confident there). Third, proper scores can disagree. CRPS rated \NHP{} as
-good as \LNM{} on synthetic data, while NLL and PIT showed that \NHP's distributions are much too
-wide. Reporting both, together with calibration, was necessary to reach the right conclusion.
-Fourth, classical self-excitation is the wrong mechanism for calendar-driven feeds. The Hawkes
-process reduces to Poisson because its constant background absorbs the short gaps that a periodic
-schedule produces, even when real follow-up files exist (Section~\ref{sec:hawkes}). Fifth, the two
-neural models have complementary strengths. \NHP{} gives sharper point forecasts on calendar-driven
-and bursty feeds, while \LNM{} is more reliable on sparse and real-world sources.
+\paragraph{Main findings.} Five findings emerge from the study. First, regular schedules are not
+memoryless: both neural models improve on Poisson by 2--4 nats/event, which corresponds to
+predictive densities that are on average (geometric mean) $e^{2}$--$e^{4}$ times higher at the
+observed gap. Second, on this kind of data an intensity-free density model is the better inductive
+bias. \LNM{} wins on likelihood, calibration and cost, ties \NHP{} on point accuracy on synthetic
+data while beating it on flights, and transfers to real data without re-tuning, although it becomes
+somewhat over-confident there. Third, proper scores can disagree. CRPS rated \NHP{} as good as \LNM{}
+on synthetic data, while NLL and PIT revealed that \NHP's distributions are much too wide, so
+reporting both scores alongside calibration was necessary to reach the right conclusion. Fourth,
+classical self-excitation is the wrong mechanism for calendar-driven feeds: the Hawkes process
+reduces to Poisson because its constant background absorbs the short gaps that a periodic schedule
+produces, even when genuine follow-up files exist (Section~\ref{sec:hawkes}). Fifth, the two neural
+models have complementary strengths, with \NHP{} giving sharper point forecasts on calendar-driven and
+bursty feeds and \LNM{} proving more reliable on sparse and real-world sources.
 
 \paragraph{Implications for data-ingestion teams.}
 \begin{itemize}
 \item \emph{Use \LNM{} as the default forecaster.} It was the best or tied-best model on both data
-  sets, and it trains about nine times faster than \NHP{}. Speed matters when models are refitted as
+  sets and trains about nine times faster than \NHP{}, which matters when models are refitted as
   sources are added or change.
 \item \emph{Do not alert from constant-rate or simple self-exciting models on scheduled feeds.} Their
-  typical errors are about four times (synthetic) and three times (flights) those of \LNM{}. Their
-  80\% intervals contain essentially every arrival, so an interval-based alert would almost never
-  fire, and late files would be noticed late.
+  typical errors are about four times (synthetic) and three times (flights) those of \LNM{}, and
+  because their 80\% intervals contain essentially every arrival, an interval-based alert would
+  almost never fire and late files would be noticed late.
 \item \emph{Check each source's intervals before alerting on them.} On flights, \LNM's 90\% interval
-  held a median of \BtsLogNormMixCovNinety{} of arrivals. That means roughly 1.8 times the intended
-  volume of out-of-range flags, and some of them would be \emph{early} arrivals. Observed coverage on
-  a recent window should be compared with the target, and the intervals recalibrated, before they
+  held a median of \BtsLogNormMixCovNinety{} of arrivals, which implies roughly 1.8 times the intended
+  volume of out-of-range flags, some of them for \emph{early} arrivals. Observed coverage on a recent
+  window should therefore be compared with the target, and the intervals recalibrated, before they
   drive pages.
 \item \emph{Use a simple rule for new or low-volume sources.} \SynNLowN{} of 25 synthetic sources and
-  \BtsNLowN{} of 48 flights could not even be scored. On low-frequency feeds, repeating the last gap
-  beat both neural models (Table~\ref{tab:group-mae}). A rule like that, or the conditional SLA
+  \BtsNLowN{} of 48 flights could not even be scored, and on low-frequency feeds repeating the last
+  gap beat both neural models (Table~\ref{tab:group-mae}). Such a rule, or the conditional SLA
   probability from a model refitted as history accumulates, is the safer starting point.
-\item \emph{Keep \NHP{} as a specialist.} It suits a few high-value calendar-driven feeds where its
-  sharper point forecasts matter and its training cost is affordable.
+\item \emph{Keep \NHP{} as a specialist} for a few high-value calendar-driven feeds, where its sharper
+  point forecasts matter and its training cost is affordable.
 \end{itemize}
 
-\paragraph{Limitations.}
-\begin{itemize}
-\item \emph{Synthetic primary benchmark.} Hyper-parameters and design choices were made on designed
-  scenarios. The BTS check guards against over-fitting to them, but flights are one domain from one
-  carrier and one route.
-\item \emph{Per-source models.} Each source is modelled independently. Sources with only a few
-  dozen events, such as monthly reports, are where every model struggles. Pooling across sources
-  would likely help.
-\item \emph{Small test sets for sparse sources.} \SynNLowN{} synthetic sources and \BtsNLowN{}
-  flights have fewer than five test events and are excluded from headline statistics.
-\item \emph{Non-stationarity.} The chronological split exposes models to schedule changes they have
-  not seen. This is realistic, but it shows up as over-confidence on BTS. We do not retrain or
-  recalibrate online.
-\item \emph{Baselines.} Classical models without covariates are the natural reference for TPPs, but
-  a calendar-aware classical baseline (piecewise-constant Poisson or a seasonal empirical quantile)
-  would be a stronger non-neural competitor. Its implementation is in the code base but was not part
-  of the final comparison.
-\item \emph{SLA threshold.} A fixed 24\,h deadline sits exactly on the normal gap of daily sources
-  and flights, which makes the SLA metric noisy there; a deadline with a margin, or a cost-based
-  rule, would be more informative.
-\item \emph{Ablations.} The runner supports removing calendar features and Time2Vec, but the
-  ablation runs were not completed within the project's compute budget. The contribution of each
-  input is therefore not isolated.
-\end{itemize}
+\paragraph{Limitations.} The study has several limitations. Hyper-parameters and design choices were
+made on designed synthetic scenarios, and although the BTS check guards against over-fitting to
+them, the flights represent a single domain, carrier and route. Each source is also modelled
+independently, so sources with only a few dozen events, such as monthly reports, are where every
+model struggles and where pooling across sources would most likely help; \SynNLowN{} synthetic
+sources and \BtsNLowN{} flights have fewer than five test events and are excluded from headline
+statistics altogether. The chronological split realistically exposes models to schedule changes they
+have not seen, which shows up as over-confidence on BTS, and we neither retrain nor recalibrate
+online. Classical models without covariates are the natural reference for TPPs, but a calendar-aware
+classical baseline, such as a piecewise-constant Poisson process or a seasonal empirical quantile,
+would be a stronger non-neural competitor; its implementation exists in the code base but was not
+part of the final comparison. The fixed 24\,h deadline sits exactly on the normal gap of daily
+sources and flights, which makes the SLA metric noisy there, and a deadline with a margin or a
+cost-based rule would be more informative. Finally, although the runner supports removing the
+calendar features and Time2Vec, the ablation runs were not completed within the project's compute
+budget, so the contribution of each input has not been isolated.
 
 % =====================================================================
 \section{Conclusion}\label{sec:conclusion}
@@ -742,16 +729,15 @@ and bursty feeds, while \LNM{} is more reliable on sparse and real-world sources
 We framed ``when will the next file arrive?'' as probabilistic forecasting with temporal point
 processes and compared Poisson, Hawkes, Neural Hawkes and log-normal-mixture models under a
 leakage-safe, censoring-aware protocol. An intensity-free GRU with a log-normal-mixture decoder was
-the most accurate model in likelihood and the only well-calibrated one. Its median gain over
-Poisson was \SynLogNormMixGain{} nats/event on 21 synthetic schedules and \BtsLogNormMixGain{} on
-34 real flights, and it beat the naive lag-1 forecast on most sources. It was also about nine times
-cheaper per training run than the Neural Hawkes process on the synthetic data. The Neural Hawkes process was competitive
-in CRPS and gave the sharpest point forecasts on calendar-driven synthetic feeds, but it was
-under-confident and fragile on unusually long gaps and on short real histories. The classical
-Hawkes process offered no improvement over Poisson. A recovery experiment and a profile likelihood
-show that this is because a constant background cannot represent a periodic schedule, not because
-the fit is wrong. For production data-pipeline monitoring we
-recommend the log-normal-mixture model with calendar covariates, wrapped with conditional
+the most accurate model in likelihood and the only well-calibrated one. Its median gain over Poisson
+was \SynLogNormMixGain{} nats/event on 21 synthetic schedules and \BtsLogNormMixGain{} on 34 real
+flights, and it beat the naive lag-1 forecast on most sources while costing about nine times less
+per training run than the Neural Hawkes process on the synthetic data. The Neural Hawkes process was
+competitive in CRPS and gave the sharpest point forecasts on calendar-driven synthetic feeds, but it
+was under-confident and fragile on unusually long gaps and on short real histories. The classical
+Hawkes process offered no improvement over Poisson, and a recovery experiment together with a
+profile likelihood shows that this is because a constant background cannot represent a periodic
+schedule, not because the fit is wrong. For production data-pipeline monitoring we recommend the log-normal-mixture model with calendar covariates, wrapped with conditional
 ``still-arrives-before-deadline'' probabilities and rolling calibration checks.
 
 \paragraph{Future work.} Natural next steps are: (i) global models trained across sources with
@@ -760,8 +746,8 @@ recent window, to handle schedule drift; (iii) an explicit outage or mixture-wit
 for robustness to rare long gaps; (iv) a Hawkes process with a calendar-dependent background, which
 should recover the follow-up structure that the constant-background model misses; (v) the
 calendar-feature and Time2Vec ablations and a calendar-aware classical baseline; (vi) repeating the
-flight analysis on other routes (the original practicum data covered five) to see whether \LNM's
-over-confidence on flights generalises; and (vii) a cost-based alerting rule evaluated on real
+flight analysis on other routes and carriers to see whether \LNM's over-confidence on flights
+generalises; and (vii) a cost-based alerting rule evaluated on real
 incident logs.
 
 \paragraph{Reproducibility.} All code, data and result summaries are available at \repo. Run
