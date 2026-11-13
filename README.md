@@ -1,6 +1,6 @@
 # ArrivalCast: when will the next file arrive?
 
-[![CI](https://github.com/OWNER/arrivalcast/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/arrivalcast/actions/workflows/ci.yml)
+[![CI](https://github.com/anushreedas/arrivalcast/actions/workflows/ci.yml/badge.svg)](https://github.com/anushreedas/arrivalcast/actions/workflows/ci.yml)
 ![python](https://img.shields.io/badge/python-3.10%20%7C%203.11-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
