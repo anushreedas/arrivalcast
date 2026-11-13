@@ -1,0 +1,17 @@
+\begin{table*}[t]
+\centering\small
+\caption{Synthetic sources: test-set results over 21 sources (medians over sources; neural models averaged over seeds first). NLL gain = $\mathrm{NLL}_{\text{Poisson}} - \mathrm{NLL}_{\text{model}}$ in nats/event; CRPS skill = $1-\mathrm{CRPS}/\mathrm{CRPS}_{\text{Poisson}}$; mean rank by NLL (1 = best); MAE / lag-1 is the ratio of the median-forecast MAE to the naive last-gap forecast ($<1$ is better). Best value per column in bold.}
+\label{tab:scoreboard-syn}
+\begin{tabular}{lcccccccc}
+\toprule
+ & \multicolumn{2}{c}{Probabilistic skill} & & \multicolumn{2}{c}{Sources won} & \multicolumn{2}{c}{Interval coverage} & Point \\
+\cmidrule(lr){2-3}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+Model & NLL gain & CRPS skill & Mean rank & NLL & CRPS & 50\% & 80\% & MAE / lag-1 \\
+\midrule
+Poisson & +0.00 & 0.00 & 3.57 & 0/21 & 0/21 & 0.94 & 1.00 & 2.15 \\
+Hawkes & +0.00 & 0.00 & 3.43 & 0/21 & 0/21 & 0.94 & 1.00 & 2.15 \\
+NHP & +1.76 & \textbf{0.80} & 1.95 & 1/21 & 10/21 & 0.91 & 1.00 & 0.59 \\
+LogNormMix & \textbf{+3.31} & 0.76 & \textbf{1.05} & 20/21 & 11/21 & 0.49 & 0.81 & \textbf{0.50} \\
+\bottomrule
+\end{tabular}
+\end{table*}

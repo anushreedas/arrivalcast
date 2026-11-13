@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering\small
+\caption{Hyper-parameter selection on the \emph{validation} split only (synthetic sources with $\geq$10 validation events). $\Delta$ is the mean change in validation NLL per event relative to the reference ($<0$ is better), with its standard error over sources.}
+\label{tab:tuning}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llccccc}
+\toprule
+Model & Configuration & $\Delta$ val.\ NLL & SE & Better on & At cap & Seeds \\
+\midrule
+LogNormMix & reference ($\eta=10^{-2}$, $H=32$, $K=4$) & 0 & -- & -- & 0.01 & 10 \\
+LogNormMix & $\eta=3\cdot10^{-3}$ & -0.255 & 0.050 & 17/20 & 0.12 & 10 \\
+LogNormMix & hidden size $H=64$ & +0.089 & 0.047 & 7/20 & 0.01 & 10 \\
+LogNormMix & $K=8$ mixture components & +0.086 & 0.035 & 6/20 & 0.01 & 10 \\
+\midrule
+NHP & reference ($\eta=10^{-2}$, $H=32$) & 0 & -- & -- & 0.08 & 3 \\
+NHP & $\eta=3\cdot10^{-3}$ & +0.183 & 0.038 & 2/20 & 0.22 & 3 \\
+\bottomrule
+\end{tabular}}
+\end{table}

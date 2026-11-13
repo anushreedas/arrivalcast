@@ -1,0 +1,37 @@
+\begin{table*}[t]
+\centering\scriptsize
+\caption{The 26 synthetic sources (2023--2024). Median gap in hours; $n$ = arrivals; test = completed test gaps scored. $\dagger$: fewer than 5 test events, excluded from headline statistics; SRC\_23 (annual, 2 arrivals) cannot be modelled.}
+\label{tab:sources}
+\begin{tabular}{llp{9.2cm}rrr}
+\toprule
+Source & Group & Generating pattern & $n$ & Median gap & Test \\
+\midrule
+SRC\_01 & Regular cadence & Daily at $\sim$09:00 UTC -- every calendar day & 731 & 24.0 & 109 \\
+SRC\_02 & Calendar-driven & Daily at $\sim$09:00 UTC, $\sim$4h late on Wednesdays & 731 & 24.0 & 109 \\
+SRC\_03 & Calendar-driven & Weekdays only at $\sim$14:00 UTC & 522 & 24.1 & 79 \\
+SRC\_04$^\dagger$ & Low frequency & Monthly -- first business day at $\sim$06:00 UTC & 24 & 743.0 & 3 \\
+SRC\_05$^\dagger$ & Low frequency & Quarterly -- first biz day of Jan/Apr/Jul/Oct at $\sim$06:00 UTC & 8 & 2184.0 & 1 \\
+SRC\_06 & Calendar-driven & Tuesday, Wednesday, Thursday only at $\sim$11:00 UTC & 313 & 24.2 & 47 \\
+SRC\_07 & Calendar-driven & Weekdays excluding US federal holidays at $\sim$08:00 UTC & 500 & 24.1 & 75 \\
+SRC\_08 & Regular cadence & Hourly 24/7 & 17544 & 1.0 & 2631 \\
+SRC\_09 & Regular cadence & Every 6 hours (00/06/12/18 UTC), every day & 2924 & 6.0 & 438 \\
+SRC\_10 & Calendar-driven & Twice daily on weekdays ($\sim$08:00 and $\sim$18:00 UTC) & 1044 & 11.2 & 156 \\
+SRC\_11 & Calendar-driven & Business hours every 2h on weekdays (08/10/12/14/16 UTC) & 2610 & 2.1 & 391 \\
+SRC\_12 & Low frequency & Weekly -- Mondays only at $\sim$07:00 UTC & 105 & 168.0 & 15 \\
+SRC\_13 & Low frequency & Weekly -- Fridays at $\sim$16:00 UTC, high jitter ($\pm$2h) & 104 & 168.1 & 15 \\
+SRC\_14 & Calendar-driven & Weekdays at $\sim$09:00 UTC + reduced weekend service at $\sim$15:00 UTC & 731 & 24.0 & 109 \\
+SRC\_15 & Low frequency & Bi-weekly -- alternating Mondays at $\sim$07:00 UTC & 53 & 336.0 & 8 \\
+SRC\_16$^\dagger$ & Low frequency & Last business day of each month at $\sim$16:00 UTC (higher jitter) & 24 & 740.8 & 3 \\
+SRC\_17 & Low frequency & 5th/15th/25th of month (or next biz day) at $\sim$09:00 UTC & 72 & 240.1 & 11 \\
+SRC\_18$^\dagger$ & Low frequency & Second Tuesday of each month at $\sim$10:00 UTC & 24 & 672.3 & 3 \\
+SRC\_19 & Perturbed & Daily at $\sim$10:00 UTC with 5\% random outage probability & 698 & 24.0 & 104 \\
+SRC\_20 & Perturbed & Daily at $\sim$10:00 UTC -- 3x jitter in Dec and Jan & 731 & 24.0 & 109 \\
+SRC\_21 & Bursty & Daily at $\sim$09:00 UTC + 3 files/day on last 3 days of quarter & 779 & 24.0 & 117 \\
+SRC\_22 & Bursty & Weekdays at $\sim$09:00 UTC; 8\% chance of correction file $\sim$3h later & 570 & 24.0 & 85 \\
+SRC\_23 & Low frequency & Annual -- first business day of the year at $\sim$06:00 UTC & 2 & 8735.6 & -- \\
+SRC\_24 & Bursty & Self-exciting (Hawkes-like): daily background + offspring within 4h (alpha=0.4, beta=0.5/h) & 1001 & 20.5 & 150 \\
+SRC\_25 & Heavy-tailed & Heavy-tail inter-arrivals: Pareto(b=1.5, scale=3h) & 2022 & 4.7 & 304 \\
+SRC\_26 & Perturbed & Weekdays at $\sim$09:00 UTC; delay proportional to previous file size (LogNormal sizes, 0.5 min/MB, cap 120 min) & 522 & 24.1 & 79 \\
+\bottomrule
+\end{tabular}
+\end{table*}

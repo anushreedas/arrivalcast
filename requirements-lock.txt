@@ -1,0 +1,11 @@
+holidays==0.96
+matplotlib==3.11.1
+numpy==1.26.4
+pandas==3.0.3
+pyarrow==24.0.0
+pytest==9.1.1
+requests==2.34.0
+ruff==0.17.5
+scipy==1.17.1
+torch==2.2.2
+tqdm==4.67.3

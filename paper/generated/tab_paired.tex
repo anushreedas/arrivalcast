@@ -1,0 +1,22 @@
+\begin{table*}[t]
+\centering\small
+\caption{Paired comparisons across sources (Wilcoxon signed-rank). ``Effect'' is the median NLL advantage of A in nats/event for NLL and the median CRPS ratio A/B for CRPS ($<1$ favours A). $p$-values are descriptive: the synthetic sources are designed scenarios, not a random sample.}
+\label{tab:paired}
+\begin{tabular}{llcccccc}
+\toprule
+Metric & Comparison (A vs B) & \multicolumn{3}{c}{Synthetic} & \multicolumn{3}{c}{BTS flights} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+ & & A wins & Effect & $p$ & A wins & Effect & $p$ \\
+\midrule
+NLL & LogNormMix vs NHP & 20/21 & +0.89 & $<$0.001 & 31/34 & +1.79 & $<$0.001 \\
+NLL & LogNormMix vs Poisson & 21/21 & +3.31 & $<$0.001 & 32/34 & +2.35 & $<$0.001 \\
+NLL & NHP vs Poisson & 21/21 & +1.76 & $<$0.001 & 22/34 & +0.55 & 0.566 \\
+NLL & Hawkes vs Poisson & 12/21 & +0.00 & 0.539 & 23/34 & +0.00 & 0.091 \\
+\midrule
+CRPS & LogNormMix vs NHP & 11/21 & 0.943 & 0.946 & 31/34 & 0.695 & $<$0.001 \\
+CRPS & LogNormMix vs Poisson & 21/21 & 0.239 & $<$0.001 & 34/34 & 0.315 & $<$0.001 \\
+CRPS & NHP vs Poisson & 20/21 & 0.203 & $<$0.001 & 28/34 & 0.540 & $<$0.001 \\
+CRPS & Hawkes vs Poisson & 9/21 & 1.000 & 0.089 & 20/34 & 1.000 & 0.309 \\
+\bottomrule
+\end{tabular}
+\end{table*}

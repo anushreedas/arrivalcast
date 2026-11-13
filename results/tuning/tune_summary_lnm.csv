@@ -1,0 +1,5 @@
+config,mean delta val,median delta val,SE of mean,better on,clearly better than ref,seeds,share of runs at epoch cap,median train s
+ref,0.0,0.0,0.0,-,False,10,0.01,2.6
+lr3e-3,-0.25495,-0.2623,0.05013,17/20,True,10,0.125,3.8
+h64,0.08932,0.05717,0.0472,7/20,False,10,0.015,2.7
+k8,0.08645,0.06644,0.03452,6/20,False,10,0.005,2.325

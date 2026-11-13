@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Large / re-creatable data (see data/README.md)
+data/airline_flights_raw/
+data/synthetic_arrivals.csv
+
+# Heavy experiment artefacts: keep summaries (CSV/JSON/figures) in git, not checkpoints or per-event dumps
+results/**/models/
+results/**/parts/
+results/**/predictions/
+results/**/test_predictions.parquet
+
+# LaTeX build products
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz

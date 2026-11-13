@@ -1,0 +1,17 @@
+\begin{table*}[t]
+\centering\small
+\caption{BTS flight arrivals (held-out check, settings frozen from the synthetic study): test-set results over 34 flight numbers. Columns as in Table~\ref{tab:scoreboard-syn}.}
+\label{tab:scoreboard-bts}
+\begin{tabular}{lcccccccc}
+\toprule
+ & \multicolumn{2}{c}{Probabilistic skill} & & \multicolumn{2}{c}{Sources won} & \multicolumn{2}{c}{Interval coverage} & Point \\
+\cmidrule(lr){2-3}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-9}
+Model & NLL gain & CRPS skill & Mean rank & NLL & CRPS & 50\% & 80\% & MAE / lag-1 \\
+\midrule
+Poisson & +0.00 & 0.00 & 3.26 & 0/34 & 0/34 & 0.93 & 1.00 & 0.89 \\
+Hawkes & +0.00 & 0.00 & 2.91 & 2/34 & 0/34 & 0.93 & 1.00 & 0.89 \\
+NHP & +0.55 & 0.46 & 2.62 & 3/34 & 3/34 & 0.81 & 0.93 & 0.84 \\
+LogNormMix & \textbf{+2.35} & \textbf{0.69} & \textbf{1.21} & 29/34 & 31/34 & 0.44 & 0.71 & \textbf{0.52} \\
+\bottomrule
+\end{tabular}
+\end{table*}

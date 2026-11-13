@@ -1,0 +1,25 @@
+source_id,pattern_description,arrival_timestamp
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-01-31 15:30:02.965577
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-02-28 17:11:45.995664
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-03-31 16:22:21.424563
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-04-28 16:09:45.411330
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-05-31 15:14:03.617378
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-06-30 14:50:53.409844
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-07-31 18:34:27.870405
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-08-31 15:20:46.103692
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-09-29 16:11:57.618038
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-10-31 14:20:26.976256
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-11-30 15:09:11.528168
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2023-12-29 16:25:56.844010
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-01-31 17:49:36.892989
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-02-29 16:18:12.156548
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-03-29 15:45:03.223195
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-04-30 16:01:57.641293
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-05-31 14:38:54.047029
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-06-28 16:52:21.292628
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-07-31 13:21:34.151602
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-08-30 15:11:39.908573
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-09-30 16:56:39.020956
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-10-31 16:18:35.295499
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-11-29 16:31:08.256627
+SRC_16,Last business day of each month at ~16:00 UTC (higher jitter),2024-12-31 16:03:49.747543

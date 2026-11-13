@@ -1,0 +1,41 @@
+{
+  "lnm": {
+    "hidden_dim": 32,
+    "t2v_dim": 8,
+    "n_components": 4,
+    "n_mc_samples": 5,
+    "use_calendar_features": true,
+    "use_time2vec": true,
+    "lr": 0.01,
+    "weight_decay": 0.0,
+    "grad_clip": 5.0,
+    "max_epochs": 200,
+    "patience": 20,
+    "min_delta": 0.0001,
+    "chunk_len": 128,
+    "burn_in": 32,
+    "batch_size": 16,
+    "seed": 0
+  },
+  "nhp": {
+    "hidden_dim": 32,
+    "t2v_dim": 8,
+    "n_components": 4,
+    "n_mc_samples": 5,
+    "use_calendar_features": true,
+    "use_time2vec": true,
+    "lr": 0.01,
+    "weight_decay": 0.0,
+    "grad_clip": 5.0,
+    "max_epochs": 600,
+    "patience": 20,
+    "min_delta": 0.0001,
+    "chunk_len": 128,
+    "burn_in": 32,
+    "batch_size": 16,
+    "seed": 0
+  },
+  "study_end": {
+    "synthetic": "2025-01-01 00:00:00"
+  }
+}

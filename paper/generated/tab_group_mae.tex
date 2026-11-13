@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering\small
+\caption{Median MAE (hours) of the median forecast by schedule type, synthetic data. ``Lag-1'' repeats the previous gap. Hawkes is omitted (within 0.3\,h of Poisson in every group). Lowest value per row in bold.}
+\label{tab:group-mae}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+Schedule type & $n$ & Poisson & NHP & LogNormMix & Lag-1 \\
+\midrule
+Regular cadence & 3 & 1.84 & 0.11 & \textbf{0.10} & 0.21 \\
+Calendar-driven & 7 & 7.37 & \textbf{0.50} & 4.22 & 13.91 \\
+Low frequency & 4 & 63.41 & 19.03 & 2.81 & \textbf{2.07} \\
+Perturbed & 3 & 7.94 & \textbf{1.04} & 1.64 & 3.12 \\
+Bursty & 3 & 11.23 & \textbf{2.56} & 7.16 & 13.70 \\
+Heavy-tailed & 1 & 4.59 & 4.97 & \textbf{4.26} & 7.38 \\
+\bottomrule
+\end{tabular}}
+\end{table}

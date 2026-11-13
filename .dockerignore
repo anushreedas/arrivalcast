@@ -1,0 +1,7 @@
+.venv
+.git
+results
+paper
+notebooks
+data/airline_flights_raw
+**/__pycache__

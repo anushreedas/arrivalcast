@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "ArrivalCast: probabilistic next-arrival forecasting with classical and neural temporal point processes"
+authors:
+  - family-names: Das
+    given-names: Anushree
+version: 1.0.0
+date-released: 2026-11-12
+license: MIT

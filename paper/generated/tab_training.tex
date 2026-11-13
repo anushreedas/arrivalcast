@@ -1,0 +1,16 @@
+\begin{table}[t]
+\centering\small
+\caption{Training cost and convergence of the neural models (CPU, one thread). ``At cap'' counts runs that were still improving when the epoch budget ran out.}
+\label{tab:training}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+Data & Model & Runs & At cap & Best epoch & Sec./run \\
+\midrule
+Synthetic & NHP & 125 & 8 & 156 & 37.2 \\
+Synthetic & LogNormMix & 250 & 28 & 74 & 4.3 \\
+BTS & NHP & 235 & 0 & 69 & 4.1 \\
+BTS & LogNormMix & 440 & 16 & 50 & 1.5 \\
+\bottomrule
+\end{tabular}}
+\end{table}
