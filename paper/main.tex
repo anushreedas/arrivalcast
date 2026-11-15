@@ -338,7 +338,7 @@ Both neural models are trained per source with Adam~\citep{kingma2015adam} (grad
 early stopping on validation NLL (patience 20 epochs, minimum improvement $10^{-4}$), after which the
 best validation weights are restored. Because sequence lengths range from tens of events to 17,544,
 and a full unroll of the CT-LSTM on the hourly source took about 30\,s per gradient step, long
-sequences are trained with truncated back-propagation through time~\citep{williams1990efficient}.
+sequences are trained with truncated back-propagation through time (BPTT)~\citep{williams1990efficient}.
 Each window holds about 128 events and is preceded by 32 burn-in events that warm up the recurrent
 state without contributing to the loss, and windows are shuffled and batched 16 at a time. Sequences
 shorter than 256 events form a single window and use the exact objective of Eq.~\eqref{eq:ll},
