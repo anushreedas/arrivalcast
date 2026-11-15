@@ -383,19 +383,8 @@ designed rather than sampled, the resulting $p$-values should be read as descrip
 \subsection{System design}
 The study is implemented as an installable Python package (PyTorch~\citep{paszke2019pytorch}) with a
 single command-line entry point. It comprises a data pipeline (synthetic generator and BTS
-extractor), a resumable experiment runner that caches each (source, model, seed) unit, a tuning
-summariser, a report generator that writes every table, figure and in-text number of this paper, and
-an inference module, and it enforces experimental hygiene in code:
-\begin{itemize}
-\item BTS runs require settings frozen from a synthetic run (\texttt{--freeze-from});
-\item a frozen run rejects any training flag;
-\item reusing a run name with different settings is refused;
-\item default run names are hashes of the configuration.
-\end{itemize}
-A suite of 51 tests, covering closed-form and brute-force likelihood checks, determinism, checkpoint
-round-trips and an end-to-end CLI run, runs in continuous integration. Re-running the packaged code
-reproduced the archived metrics exactly for the classical models on all sources and for \LNM{}
-(seed 0) on a sample of five sources.
+extractor), a resumable experiment runner that caches each (source, model, seed) unit, and
+an inference module.
 
 % =====================================================================
 \section{Results}\label{sec:results}
