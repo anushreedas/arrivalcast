@@ -369,8 +369,6 @@ metrics are computed from these two functions:
   exponential distributions to within 0.2\%.
 \item \textbf{PICP}: observed coverage of the central 50/80/90\% predictive intervals, together with
   PIT histograms~\citep{dawid1984present}.
-\item \textbf{SLA-hit}: accuracy of predicting whether the next gap is $\le$24\,h, using
-  $F(24)\ge0.5$ as the prediction.
 \item \textbf{MAE / lag-1}: MAE of the predictive median divided by the MAE of the naive ``same gap
   as last time'' forecast.
 \end{itemize}
@@ -475,8 +473,8 @@ wide; mass at the edges = too narrow.}
 \label{fig:pit}
 \end{figure}
 
-\subsection{Point forecasts and SLA decisions}
-Operational users often want a single time and a yes/no answer. Taking the predictive median as the
+\subsection{Point forecasts}
+Operational users often want a single predicted time rather than a distribution. Taking the predictive median as the
 point forecast and comparing its MAE with that of the naive ``same gap as last time'' (lag-1) rule,
 the median ratio is \SynLogNormMixMaeRatio{} for \LNM{}, 0.59 for \NHP{} and 2.15 for Poisson and
 Hawkes (Table~\ref{tab:scoreboard-syn}). \LNM{} beats the lag-1 rule on \SynLogNormMixBeatsLag{} of
@@ -667,9 +665,7 @@ have not seen, which shows up as over-confidence on BTS, and we neither retrain 
 online. Classical models without covariates are the natural reference for TPPs, but a calendar-aware
 classical baseline, such as a piecewise-constant Poisson process or a seasonal empirical quantile,
 would be a stronger non-neural competitor; its implementation exists in the code base but was not
-part of the final comparison. The fixed 24\,h deadline sits exactly on the normal gap of daily
-sources and flights, which makes the SLA metric noisy there, and a deadline with a margin or a
-cost-based rule would be more informative. Finally, although the runner supports removing the
+part of the final comparison. Finally, although the runner supports removing the
 calendar features and Time2Vec, the ablation runs were not completed within the project's compute
 budget, so the contribution of each input has not been isolated.
 
