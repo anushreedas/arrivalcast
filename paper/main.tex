@@ -609,7 +609,7 @@ background is random, but not when it is periodic.}
 \subsection{Cost and stability}
 \input{generated/tab_training.tex}
 Table~\ref{tab:training} reports training cost. A synthetic \NHP{} run takes a median of
-\SynNHPSecPerRun\,s against \SynLogNormMixSecPerRun\,s for \LNM{},. The difference stems from the sequential CT-LSTM loop and the Monte
+\SynNHPSecPerRun\,s against \SynLogNormMixSecPerRun\,s for \LNM{}. The difference stems from the sequential CT-LSTM loop and the Monte
 Carlo compensator, both of which \LNM{} avoids. Because \SynNHPHitCap{} \NHP{} and
 \SynLogNormMixHitCap{} \LNM{} runs ended at the epoch cap, a few models may be slightly
 under-trained.
@@ -645,7 +645,7 @@ bursty feeds and \LNM{} proving more reliable on sparse and real-world sources.
   held a median of \BtsLogNormMixCovNinety{} of arrivals, which implies roughly 1.8 times the intended
   volume of out-of-range flags, some of them for \emph{early} arrivals. Observed coverage on a recent
   window should therefore be compared with the target, and the intervals recalibrated, before they
-  drive pages.
+  drive alerts.
 \item \emph{Use a simple rule for new or low-volume sources.} \SynNLowN{} of 25 synthetic sources and
   \BtsNLowN{} of 48 flights could not even be scored, and on low-frequency feeds repeating the last
   gap beat both neural models (Table~\ref{tab:group-mae}). Such a rule, or the conditional SLA
@@ -664,8 +664,7 @@ statistics altogether. The chronological split realistically exposes models to s
 have not seen, which shows up as over-confidence on BTS, and we neither retrain nor recalibrate
 online. Classical models without covariates are the natural reference for TPPs, but a calendar-aware
 classical baseline, such as a piecewise-constant Poisson process or a seasonal empirical quantile,
-would be a stronger non-neural competitor; its implementation exists in the code base but was not
-part of the final comparison. Finally, although the runner supports removing the
+would be a stronger non-neural competitor. Finally, although the runner supports removing the
 calendar features and Time2Vec, the ablation runs were not completed within the project's compute
 budget, so the contribution of each input has not been isolated.
 
@@ -695,12 +694,6 @@ calendar-feature and Time2Vec ablations and a calendar-aware classical baseline;
 flight analysis on other routes and carriers to see whether \LNM's over-confidence on flights
 generalises; and (vii) a cost-based alerting rule evaluated on real
 incident logs.
-
-\paragraph{Reproducibility.} All code, data and result summaries are available at \repo. Run
-\texttt{make reproduce-syn}, \texttt{make reproduce-bts} and \texttt{make paper} to regenerate the
-experiments and this document. All tables, figures and in-text numbers are produced by
-\texttt{arrivalcast report} and \texttt{arrivalcast hawkes-check} from the run folders and data (Python 3.11, PyTorch 2.2, NumPy 1.26,
-pandas 3.0, SciPy 1.17).
 
 \small
 \bibliographystyle{unsrtnat}
